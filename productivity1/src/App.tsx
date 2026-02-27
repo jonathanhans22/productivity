@@ -106,10 +106,15 @@ function App() {
     setTimeout(() => setToasts(prev => prev.filter(t => t.id !== id)), 3000)
   }
 
+  // Popover event detail
+  const [eventPopover, setEventPopover] = useState<{ isOpen: boolean; target: HTMLElement | null; date: string }>({ isOpen: false, target: null, date: '' });
+  const openEventPopover = (e: React.MouseEvent, date: string) => {
+    setEventPopover({ isOpen: true, target: e.currentTarget as HTMLElement, date });
+  };
+  const closeEventPopover = () => setEventPopover({ isOpen: false, target: null, date: '' });
+
+  // Quick add tetap untuk tambah event cepat
   const openQuickAdd = (e: React.MouseEvent, date: string) => {
-    if ((e.target as HTMLElement).closest('.event-badge')) {
-      return;
-    }
     setQuickAddPopover({ isOpen: true, target: e.currentTarget as HTMLElement, date });
   };
 
@@ -357,11 +362,32 @@ function App() {
   }
 
   const today = new Date()
-  const currentMonth = today.getMonth()
-  const currentYear = today.getFullYear()
-  const daysInMonth = new Date(currentYear, currentMonth + 1, 0).getDate()
-  const firstDayOfMonth = new Date(currentYear, currentMonth, 1).getDay()
+  // State untuk bulan & tahun kalender yang sedang aktif
+  const [calendarMonth, setCalendarMonth] = useState(today.getMonth())
+  const [calendarYear, setCalendarYear] = useState(today.getFullYear())
+  const daysInMonth = new Date(calendarYear, calendarMonth + 1, 0).getDate()
+  const firstDayOfMonth = new Date(calendarYear, calendarMonth, 1).getDay()
   const monthNames = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"]
+
+  // Navigasi bulan
+  const goToPrevMonth = () => {
+    setCalendarMonth(prev => {
+      if (prev === 0) {
+        setCalendarYear(y => y - 1);
+        return 11;
+      }
+      return prev - 1;
+    });
+  };
+  const goToNextMonth = () => {
+    setCalendarMonth(prev => {
+      if (prev === 11) {
+        setCalendarYear(y => y + 1);
+        return 0;
+      }
+      return prev + 1;
+    });
+  };
 
   const activeFolder = activeNote ? folders.find(f => f.notes.some(n => n.id === activeNote.id)) : null
 
@@ -508,28 +534,83 @@ function App() {
 
             {dashboardTab === 'calendar' && (
               <div className="calendar-views">
-                <h3 style={{ marginBottom: '1rem' }}>{monthNames[currentMonth]} {currentYear}</h3>
+                {/* Navigasi Bulan */}
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '1rem', marginBottom: '1rem' }}>
+                  <button className="btn-timer" onClick={goToPrevMonth}>&lt;</button>
+                  <h3 style={{ margin: 0 }}>{monthNames[calendarMonth]} {calendarYear}</h3>
+                  <button className="btn-timer" onClick={goToNextMonth}>&gt;</button>
+                </div>
                 <div className="calendar-header-row">
                   {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(d => <div key={d}>{d}</div>)}
                 </div>
                 <div className="calendar-grid">
                   {Array.from({ length: firstDayOfMonth }).map((_, i) => <div key={`empty-${i}`} className="cal-day empty"></div>)}
                   {Array.from({ length: daysInMonth }, (_, i) => i + 1).map(day => {
-                    const dateStr = `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`
+                    const dateStr = `${calendarYear}-${String(calendarMonth + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`
                     const dayTasks = tasks.filter(t => t.date === dateStr)
-                    const isToday = day === today.getDate()
+                    const isToday = day === today.getDate() && calendarMonth === today.getMonth() && calendarYear === today.getFullYear();
 
+                    // Drag & drop event antar tanggal
+                    const onDropEvent = (e: React.DragEvent<HTMLDivElement>) => {
+                      e.preventDefault();
+                      const taskId = e.dataTransfer.getData('text/event-id');
+                      if (!taskId) return;
+                      setTasks(prev => prev.map(t => t.id === taskId ? { ...t, date: dateStr } : t));
+                    };
+                    const onDragOver = (e: React.DragEvent<HTMLDivElement>) => {
+                      e.preventDefault();
+                    };
+
+                    // Deteksi event penting/urgent
+                    const isImportant = dayTasks.some(t => /urgent|penting/i.test(t.title));
                     return (
-                      <div key={day} className={`cal-day ${isToday ? 'today' : ''}`} onClick={(e) => openQuickAdd(e, dateStr)}>
+                      <div
+                        key={day}
+                        className={`cal-day ${isToday ? 'today' : ''} ${isImportant ? 'important-day' : ''}`}
+                        onClick={e => openEventPopover(e, dateStr)}
+                        style={{ position: 'relative', cursor: 'pointer' }}
+                        onDrop={onDropEvent}
+                        onDragOver={onDragOver}
+                      >
                         <div className="day-header">
                           <span className="day-num">{day}</span>
+                          {dayTasks.length > 0 && (
+                            <span className="event-count-badge">{dayTasks.length}</span>
+                          )}
                         </div>
-                        {dayTasks.map(t => (
-                          <div key={t.id} className="event-badge">{t.title}</div>
+                        {dayTasks.slice(0, 2).map(t => (
+                          <div
+                            key={t.id}
+                            className="event-badge"
+                            draggable
+                            onDragStart={e => e.dataTransfer.setData('text/event-id', t.id)}
+                          >
+                            {t.title}
+                          </div>
                         ))}
+                        {dayTasks.length > 2 && <div className="event-badge more-badge">+{dayTasks.length - 2} more</div>}
                       </div>
                     )
                   })}
+                      {/* Popover event detail per tanggal */}
+                      {eventPopover.isOpen && (
+                        <div className="modal-overlay transparent" onClick={closeEventPopover}>
+                          <div className="event-popover" style={calculatePopoverPosition(eventPopover.target)} onClick={e => e.stopPropagation()}>
+                            <h4 className="quick-add-title">Event pada {new Date(eventPopover.date).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })}</h4>
+                            <div style={{ marginBottom: 8 }}>
+                              {tasks.filter(t => t.date === eventPopover.date).length === 0 && <div style={{ color: '#888', fontSize: 14 }}>Tidak ada event</div>}
+                              {tasks.filter(t => t.date === eventPopover.date).map(t => (
+                                <div key={t.id} className="event-popover-row">
+                                  <span>{t.title}</span>
+                                  <button className="btn-icon" title="Edit" onClick={() => { setTaskModal({ isOpen: true, defaultCategory: t.category, defaultDate: t.date }); closeEventPopover(); }}><PiPencilSimple /></button>
+                                  <button className="btn-icon-danger" title="Hapus" onClick={() => { setDeleteTaskModal({ isOpen: true, taskId: t.id, taskTitle: t.title }); closeEventPopover(); }}><PiTrash /></button>
+                                </div>
+                              ))}
+                            </div>
+                            <button className="btn-inline-add" onClick={() => { openQuickAdd({ currentTarget: eventPopover.target } as any, eventPopover.date); closeEventPopover(); }}><PiPlus style={{ marginRight: 4 }} />Tambah Event</button>
+                          </div>
+                        </div>
+                      )}
                 </div>
               </div>
             )}
@@ -604,7 +685,9 @@ function App() {
       <div className="toast-container">
         {toasts.map(toast => (
           <div key={toast.id} className={`toast ${toast.type}`}>
-            {toast.type === 'success' ? <PiCheckCircle size={20} /> : <PiWarningCircle size={20} />}
+            <span className="toast-icon">
+              {toast.type === 'success' ? <PiCheckCircle size={28} color="#22c55e" /> : <PiWarningCircle size={28} color="#ef4444" />}
+            </span>
             <span>{toast.message}</span>
             <button className="toast-close" onClick={() => setToasts(prev => prev.filter(t => t.id !== toast.id))}><PiX /></button>
           </div>
