@@ -1,4 +1,7 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, forwardRef } from 'react'
+import { CircleProgress } from './components/CircleProgress'
+import DatePicker from 'react-datepicker'
+import 'react-datepicker/dist/react-datepicker.css'
 import { useCreateBlockNote } from '@blocknote/react'
 import { BlockNoteView } from '@blocknote/mantine'
 import { DragDropContext, Droppable, Draggable, type DropResult, type DroppableProps } from 'react-beautiful-dnd'
@@ -8,10 +11,26 @@ import '@blocknote/mantine/style.css'
 import './App.css'
 
 type Note = { id: string; title: string; type: 'note' | 'canvas' }
-type Folder = { id: string; name: string; isOpen: boolean; notes: Note[] }
-type Task = { id: string; title: string; date: string; category: 'Kuliah' | 'Excel' | 'Manpro' | (string & {}); status: string }
+type Folder = { id: string; name: string; isOpen: boolean; notes: Note[]; color: string }
+type Task = { id: string; title: string; date: string; category: 'University' | 'Excel' | 'Project' | (string & {}); status: string }
 
-// Fix for React Strict Mode with react-beautiful-dnd
+// Komponen Input Tanggal Custom agar bisa diklik dan muncul pop-up kalender
+const CustomDateInput = forwardRef<HTMLInputElement, any>(({ value, onClick }, ref) => (
+  <div style={{ position: 'relative', display: 'flex', alignItems: 'center', width: '100%' }}>
+    <PiCalendar style={{ position: 'absolute', left: '12px', color: 'var(--text-secondary)', fontSize: '1.2rem', pointerEvents: 'none', zIndex: 1 }} />
+    <input
+      type="text"
+      className="form-control"
+      style={{ paddingLeft: '38px', cursor: 'pointer', width: '100%' }}
+      value={value}
+      onClick={onClick}
+      ref={ref}
+      readOnly
+      placeholder="Pilih Tanggal..."
+    />
+  </div>
+));
+
 export const StrictModeDroppable = ({ children, ...props }: DroppableProps) => {
   const [enabled, setEnabled] = useState(false);
   useEffect(() => {
@@ -28,8 +47,21 @@ export const StrictModeDroppable = ({ children, ...props }: DroppableProps) => {
 };
 
 function App() {
+  // 1. PINDAHKAN INISIALISASI KE PALING ATAS
   const [isSidebarOpen, setIsSidebarOpen] = useState(true)
   const [isDarkMode, setIsDarkMode] = useState(true)
+
+  // Deteksi dark mode untuk CircleProgress
+  const isDark = isDarkMode || document.documentElement.getAttribute('data-theme') === 'dark';
+  
+  // State untuk daily/weekly goals
+  const [goalMode, setGoalMode] = useState<'daily' | 'weekly'>('daily');
+  const [goals, setGoals] = useState<{ text: string; done: boolean; mode: 'daily' | 'weekly' }[]>([]);
+  const [goalInput, setGoalInput] = useState('');
+
+  // Filter goals sesuai mode
+  const filteredGoals = goals.filter(g => g.mode === goalMode);
+  const progress = filteredGoals.length === 0 ? 0 : Math.round(filteredGoals.filter(g => g.done).length / filteredGoals.length * 100);
 
   const [activeView, setActiveView] = useState<'dashboard' | 'note'>('dashboard')
   const [dashboardTab, setDashboardTab] = useState<'category' | 'calendar'>('category')
@@ -37,7 +69,7 @@ function App() {
 
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; folderId: string } | null>(null)
   const [noteContextMenu, setNoteContextMenu] = useState<{ x: number; y: number; noteId: string; folderId: string } | null>(null)
-  const [renameModal, setRenameModal] = useState<{ isOpen: boolean; folderId: string; currentName: string }>({ isOpen: false, folderId: '', currentName: '' })
+  const [renameModal, setRenameModal] = useState<{ isOpen: boolean; folderId: string; currentName: string; currentColor: string }>({ isOpen: false, folderId: '', currentName: '', currentColor: '' })
   const [deleteModal, setDeleteModal] = useState<{ isOpen: boolean; folderId: string; folderName: string }>({ isOpen: false, folderId: '', folderName: '' })
   const [renameNoteModal, setRenameNoteModal] = useState<{ isOpen: boolean; folderId: string; noteId: string; currentTitle: string }>({ isOpen: false, folderId: '', noteId: '', currentTitle: '' })
   const [deleteNoteModal, setDeleteNoteModal] = useState<{ isOpen: boolean; folderId: string; noteId: string; noteTitle: string }>({ isOpen: false, folderId: '', noteId: '', noteTitle: '' })
@@ -48,26 +80,34 @@ function App() {
   const [activeNote, setActiveNote] = useState<Note | null>(null)
 
   const [folders, setFolders] = useState<Folder[]>([
-    { id: 'f1', name: 'Pribadi', isOpen: true, notes: [{ id: 'n1', title: 'Jurnal', type: 'note' }] },
-    { id: 'f2', name: 'Kuliah', isOpen: true, notes: [{ id: 'n2', title: 'Skripsi Bab 1', type: 'note' }] },
-    { id: 'f3', name: 'Excel', isOpen: true, notes: [] },
-    { id: 'f4', name: 'Manpro', isOpen: true, notes: [] }
+    { id: 'f1', name: 'Personal', isOpen: true, notes: [{ id: 'n1', title: 'Journal', type: 'note' }], color: '#6366f1' },
+    { id: 'f2', name: 'University', isOpen: true, notes: [{ id: 'n2', title: 'Thesis Chapter 1', type: 'note' }], color: '#f59e42' },
+    { id: 'f3', name: 'Excel', isOpen: true, notes: [], color: '#10b981' },
+    { id: 'f4', name: 'Project', isOpen: true, notes: [], color: '#ef4444' }
   ])
 
   const [tasks, setTasks] = useState<Task[]>([
     { id: '1', title: 'Basic to Advanced', date: '2026-01-26', category: 'Excel', status: 'To Do' },
-    { id: '2', title: 'jobseeker toolkit', date: '2026-01-28', category: 'Kuliah', status: 'To Do' },
-    { id: '3', title: 'ManPro week 1', date: '2026-02-03', category: 'Manpro', status: 'To Do' },
+    { id: '2', title: 'jobseeker toolkit', date: '2026-01-28', category: 'University', status: 'To Do' },
+    { id: '3', title: 'Project Management week 1', date: '2026-02-03', category: 'Project', status: 'To Do' },
   ])
 
+  const [timerDuration, setTimerDuration] = useState(25 * 60)
   const [timeLeft, setTimeLeft] = useState(25 * 60)
   const [isTimerRunning, setIsTimerRunning] = useState(false)
+  const [showFullscreenTimer, setShowFullscreenTimer] = useState(false)
+  const [showTimerSetting, setShowTimerSetting] = useState(false)
 
   const [taskModal, setTaskModal] = useState<{
     isOpen: boolean;
     defaultCategory: string;
     defaultDate: string;
   }>({ isOpen: false, defaultCategory: '', defaultDate: new Date().toISOString().split('T')[0] })
+
+  const [editEventModal, setEditEventModal] = useState<{ isOpen: boolean; event: Task | null }>({ isOpen: false, event: null });
+  const [eventNotes, setEventNotes] = useState<Record<string, string>>({});
+  const [openEventDetail, setOpenEventDetail] = useState<{ isOpen: boolean; event: Task | null }>({ isOpen: false, event: null });
+  const [eventPopover, setEventPopover] = useState<{ isOpen: boolean; target: HTMLElement | null; date: string }>({ isOpen: false, target: null, date: '' });
 
   const editor = useCreateBlockNote()
 
@@ -106,33 +146,34 @@ function App() {
     setTimeout(() => setToasts(prev => prev.filter(t => t.id !== id)), 3000)
   }
 
-  // Popover event detail
-  const [eventPopover, setEventPopover] = useState<{ isOpen: boolean; target: HTMLElement | null; date: string }>({ isOpen: false, target: null, date: '' });
   const openEventPopover = (e: React.MouseEvent, date: string) => {
     setEventPopover({ isOpen: true, target: e.currentTarget as HTMLElement, date });
   };
   const closeEventPopover = () => setEventPopover({ isOpen: false, target: null, date: '' });
 
-  // Quick add tetap untuk tambah event cepat
   const openQuickAdd = (e: React.MouseEvent, date: string) => {
     setQuickAddPopover({ isOpen: true, target: e.currentTarget as HTMLElement, date });
   };
 
-  const openTaskModal = (category: string = '', date: string = new Date().toISOString().split('T')[0]) => {
-    setTaskModal({ isOpen: true, defaultCategory: category, defaultDate: date })
+  const openTaskModal = (category: string = '', date?: string) => {
+    const validCategory = category || (folders[0]?.name || '');
+    // Jika date kosong, otomatis gunakan tanggal hari ini
+    const validDate = date || new Date().toISOString().split('T')[0];
+    setTaskModal({ isOpen: true, defaultCategory: validCategory, defaultDate: validDate });
   }
 
   const handleContextMenu = (e: React.MouseEvent, folderId: string) => {
     e.preventDefault()
     e.stopPropagation()
+    setNoteContextMenu(null);
     setContextMenu({ x: e.clientX, y: e.clientY, folderId })
   }
 
   const handleNoteContextMenu = (e: React.MouseEvent, noteId: string, folderId: string) => {
     e.preventDefault()
     e.stopPropagation()
+    setContextMenu(null);
     setNoteContextMenu({ x: e.clientX, y: e.clientY, noteId, folderId })
-    setContextMenu(null)
   }
 
   const createNewFolder = () => {
@@ -151,7 +192,7 @@ function App() {
     setFolders(prev => prev.filter(f => f.id !== folderId))
     setTasks(prev => prev.filter(t => t.category !== folderName))
     setDeleteModal({ isOpen: false, folderId: '', folderName: '' })
-    showToast('Folder berhasil dihapus')
+    showToast('Folder deleted successfully')
   }
 
   const confirmDeleteNote = () => {
@@ -167,7 +208,7 @@ function App() {
       setActiveView('dashboard')
     }
     setDeleteNoteModal({ isOpen: false, folderId: '', noteId: '', noteTitle: '' })
-    showToast('Catatan berhasil dihapus')
+    showToast('Note deleted successfully')
   }
 
   const handleAddNote = (folderId: string) => {
@@ -183,7 +224,7 @@ function App() {
   const openRenameModal = (folderId: string) => {
     const folder = folders.find(f => f.id === folderId)
     if (folder) {
-      setRenameModal({ isOpen: true, folderId, currentName: folder.name })
+      setRenameModal({ isOpen: true, folderId, currentName: folder.name, currentColor: folder.color })
     }
   }
 
@@ -191,18 +232,19 @@ function App() {
     e.preventDefault()
     const formData = new FormData(e.currentTarget)
     const newName = formData.get('newName') as string
-    const { folderId, currentName: oldName } = renameModal
+    const newColor = formData.get('folderColor') as string
+    const { folderId, currentName: oldName, currentColor } = renameModal
 
-    if (!newName || newName === oldName) {
-      setRenameModal({ isOpen: false, folderId: '', currentName: '' })
+    if (!newName || (newName === oldName && newColor === currentColor)) {
+      setRenameModal({ isOpen: false, folderId: '', currentName: '', currentColor: '' })
       return
     }
 
-    setFolders(prev => prev.map(f => (f.id === folderId ? { ...f, name: newName } : f)))
+    setFolders(prev => prev.map(f => (f.id === folderId ? { ...f, name: newName, color: newColor } : f)))
     setTasks(prev => prev.map(t => (t.category === oldName ? { ...t, category: newName } : t)))
 
-    setRenameModal({ isOpen: false, folderId: '', currentName: '' })
-    showToast('Folder berhasil diubah')
+    setRenameModal({ isOpen: false, folderId: '', currentName: '', currentColor: '' })
+    showToast('Folder updated successfully')
   }
 
   const handleRenameNoteSubmit = (e: React.FormEvent<HTMLFormElement>) => {
@@ -221,7 +263,7 @@ function App() {
       if (activeNote?.id === noteId) setActiveNote(prev => prev ? { ...prev, title: newTitle } : null)
     }
     setRenameNoteModal({ isOpen: false, folderId: '', noteId: '', currentTitle: '' })
-    showToast('Nama catatan berhasil diubah')
+    showToast('Note name updated successfully')
   }
 
   const toggleFolderInSidebar = (folderId: string) => {
@@ -239,12 +281,12 @@ function App() {
       id: Date.now().toString(),
       title: formData.get('title') as string,
       category: formData.get('category') as string,
-      date: formData.get('date') as string,
+      date: taskModal.defaultDate,
       status: 'To Do'
     }
     setTasks([...tasks, newTask])
     setTaskModal({ ...taskModal, isOpen: false })
-    showToast('Tugas berhasil ditambahkan')
+    showToast('Task added successfully')
   }
 
   const toggleTaskStatus = (taskId: string) => {
@@ -259,7 +301,7 @@ function App() {
   const confirmDeleteTask = () => {
     setTasks(prev => prev.filter(t => t.id !== deleteTaskModal.taskId))
     setDeleteTaskModal({ isOpen: false, taskId: '', taskTitle: '' })
-    showToast('Tugas berhasil dihapus')
+    showToast('Task deleted successfully')
   }
 
   const onDragEnd = (result: DropResult) => {
@@ -296,7 +338,7 @@ function App() {
     const formData = new FormData(e.currentTarget);
     const title = formData.get('title') as string;
     if (!title) {
-      showToast('Judul tugas tidak boleh kosong', 'error');
+      showToast('Task title cannot be empty', 'error');
       return;
     }
 
@@ -309,9 +351,25 @@ function App() {
     };
 
     setTasks(prev => [...prev, newTask]);
-    showToast('Tugas berhasil ditambahkan');
+    showToast('Task added successfully');
     setQuickAddPopover({ isOpen: false, target: null, date: '' });
   }
+
+  const handleEditEventSubmit = (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    const formData = new FormData(e.currentTarget);
+    if (!editEventModal.event) return;
+
+    const updatedTask: Task = {
+      ...editEventModal.event,
+      title: formData.get('title') as string,
+      category: formData.get('category') as string,
+      status: formData.get('status') as string,
+    };
+    setTasks(prev => prev.map(t => t.id === updatedTask.id ? updatedTask : t));
+    setEditEventModal({ isOpen: false, event: null });
+    showToast('Event updated successfully');
+  };
 
   const calculatePopoverPosition = (target: HTMLElement | null) => {
     if (!target) return {};
@@ -319,36 +377,49 @@ function App() {
     const popoverHeight = 180;
     const popoverWidth = 320;
 
-    let top = rect.bottom + 8;
+    let top;
     let left = rect.left;
+    const margin = 2;
 
-    if (top + popoverHeight > window.innerHeight) top = rect.top - popoverHeight - 8;
-    if (left + popoverWidth > window.innerWidth) left = window.innerWidth - popoverWidth - 24;
+    // Cek apakah cukup ruang di bawah
+    if (rect.bottom + margin + popoverHeight <= window.innerHeight) {
+      // Tampilkan di bawah
+      top = rect.bottom + margin;
+    } else {
+      // Tampilkan di atas, rapat ke bawah elemen
+      top = rect.top - popoverHeight - margin;
+    }
 
-    return { top, left };
+    // Jika popover keluar layar kanan, geser ke kiri
+    if (left + popoverWidth > window.innerWidth) left = window.innerWidth - popoverWidth - 12;
+
+    // Pastikan tidak keluar layar kiri/atas
+    return { top: Math.max(top, 8), left: Math.max(left, 8) };
   }
 
   const handleInputSubmit = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
     const formData = new FormData(e.currentTarget)
+    // 2. PERBAIKAN TYPO "strings" MENJADI "string"
     const value = formData.get('inputValue') as string
+    const color = formData.get('inputColor') as string || '#6366f1';
     if (!value) return
 
     if (inputModal.mode === 'create_folder') {
-      setFolders(prev => [...prev, { id: Date.now().toString(), name: value, isOpen: true, notes: [] }])
-      showToast('Folder berhasil dibuat')
+      setFolders(prev => [...prev, { id: Date.now().toString(), name: value, isOpen: true, notes: [], color }])
+      showToast('Folder created successfully')
     } else if (inputModal.mode === 'create_note' && inputModal.folderId) {
       const newNote: Note = { id: Date.now().toString(), title: value, type: 'note' }
       setFolders(prev => prev.map(f => f.id === inputModal.folderId ? { ...f, notes: [...f.notes, newNote], isOpen: true } : f))
       setActiveNote(newNote)
       setActiveView('note')
-      showToast('Catatan berhasil dibuat')
+      showToast('Note created successfully')
     } else if (inputModal.mode === 'create_canvas' && inputModal.folderId) {
       const newNote: Note = { id: Date.now().toString(), title: value, type: 'canvas' }
       setFolders(prev => prev.map(f => f.id === inputModal.folderId ? { ...f, notes: [...f.notes, newNote], isOpen: true } : f))
       setActiveNote(newNote)
       setActiveView('note')
-      showToast('Canvas berhasil dibuat')
+      showToast('Canvas created successfully')
     }
     setInputModal({ ...inputModal, isOpen: false })
   }
@@ -362,31 +433,16 @@ function App() {
   }
 
   const today = new Date()
-  // State untuk bulan & tahun kalender yang sedang aktif
   const [calendarMonth, setCalendarMonth] = useState(today.getMonth())
   const [calendarYear, setCalendarYear] = useState(today.getFullYear())
   const daysInMonth = new Date(calendarYear, calendarMonth + 1, 0).getDate()
   const firstDayOfMonth = new Date(calendarYear, calendarMonth, 1).getDay()
   const monthNames = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"]
 
-  // Navigasi bulan
-  const goToPrevMonth = () => {
-    setCalendarMonth(prev => {
-      if (prev === 0) {
-        setCalendarYear(y => y - 1);
-        return 11;
-      }
-      return prev - 1;
-    });
-  };
-  const goToNextMonth = () => {
-    setCalendarMonth(prev => {
-      if (prev === 11) {
-        setCalendarYear(y => y + 1);
-        return 0;
-      }
-      return prev + 1;
-    });
+  const goToPrevYear = () => setCalendarYear(prev => prev - 1);
+  const goToNextYear = () => setCalendarYear(prev => prev + 1);
+  const handleMonthChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    setCalendarMonth(Number(e.target.value));
   };
 
   const activeFolder = activeNote ? folders.find(f => f.notes.some(n => n.id === activeNote.id)) : null
@@ -405,8 +461,8 @@ function App() {
         <div className="user-profile">
           <div className="avatar">P</div>
           <div className="user-info">
-            <span className="user-name">Pengguna Aktif</span>
-            <span className="user-plan">Ruang Kerja Privat</span>
+            <span className="user-name">Active User</span>
+            <span className="user-plan">Private Workspace</span>
           </div>
         </div>
 
@@ -415,7 +471,7 @@ function App() {
             <PiTelevision style={{ marginRight: '8px', fontSize: '1.1rem' }} /> Dashboard
           </li>
 
-          <li style={{ marginTop: '1rem' }}><button className="btn-add-folder" onClick={createNewFolder}><PiPlus style={{ verticalAlign: 'middle' }} /> Folder Baru</button></li>
+          <li style={{ marginTop: '1rem' }}><button className="btn-add-folder" onClick={createNewFolder}><PiPlus style={{ verticalAlign: 'middle' }} /> New Folder</button></li>
           {folders.map(folder => (
             <li key={folder.id} className="folder-wrapper">
               <div className="folder-header" onContextMenu={(e) => handleContextMenu(e, folder.id)}>
@@ -437,18 +493,92 @@ function App() {
           ))}
         </ul>
 
-        <div className="pomodoro-widget">
-          <div className="timer-label"><PiTimer style={{ verticalAlign: 'text-bottom', marginRight: '4px' }} /> Fokus Timer</div>
-          <div className="timer-display">{formatTime(timeLeft)}</div>
-          <button className="btn-timer" onClick={() => setIsTimerRunning(!isTimerRunning)}>{isTimerRunning ? 'Jeda' : 'Mulai'}</button>
-          <button className="btn-timer" onClick={() => { setIsTimerRunning(false); setTimeLeft(25 * 60) }}>Reset</button>
-        </div>
+          <div className="pomodoro-widget" style={{ cursor: 'pointer', position: 'relative', zIndex: 1 }} onClick={() => setShowFullscreenTimer(true)}>
+            <div className="timer-label"><PiTimer style={{ verticalAlign: 'text-bottom', marginRight: '4px' }} /> Focus Timer</div>
+            <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', flexDirection: 'column' }}>
+              <CircleProgress
+                key={isDark ? 'dark' : 'light'}
+                progress={1 - timeLeft / timerDuration}
+                size={110}
+                strokeWidth={10}
+                bgColor={isDark ? '#444' : '#23243a33'}
+              >
+                <div className="timer-display" style={{ fontSize: 28 }}>{formatTime(timeLeft)}</div>
+              </CircleProgress>
+            </div>
+            <button className="btn-timer" onClick={e => { e.stopPropagation(); setIsTimerRunning(!isTimerRunning); }}>{isTimerRunning ? 'Pause' : 'Start'}</button>
+            <button className="btn-timer" onClick={e => { e.stopPropagation(); setIsTimerRunning(false); setTimeLeft(timerDuration) }}>Reset</button>
+            <button className="btn-timer" style={{ marginTop: 8 }} onClick={e => { e.stopPropagation(); setShowTimerSetting(true); }}>Set Timer</button>
+            <div className="timer-fullscreen-hint">Klik untuk fullscreen</div>
+          </div>
+
+          {/* Fullscreen timer dipindah ke bawah agar overlay benar-benar full page */}
 
         <div className="theme-wrapper">
-          <span className="theme-label">Mode Gelap</span>
+          <span className="theme-label">Dark Mode</span>
           <button className={`toggle-switch ${isDarkMode ? 'active' : ''}`} onClick={toggleTheme}><div className="toggle-handle">{isDarkMode ? <PiMoon size={12} color="#333" style={{ marginTop: '3px', marginLeft: '3px' }} /> : <PiSun size={12} color="#F59E0B" style={{ marginTop: '3px', marginLeft: '3px' }} />}</div></button>
         </div>
       </aside>
+
+      {/* Render fullscreen timer overlay di luar sidebar dan sebelum main */}
+      {showFullscreenTimer && (
+        <div className="fullscreen-timer-overlay" onClick={() => setShowFullscreenTimer(false)}>
+          <div className="fullscreen-timer-card" onClick={e => e.stopPropagation()}>
+            <button className="fullscreen-timer-exit" onClick={() => setShowFullscreenTimer(false)} title="Keluar fullscreen">&times;</button>
+            <div className="fullscreen-timer-label"><PiTimer style={{ verticalAlign: 'text-bottom', marginRight: '8px', fontSize: '2rem' }} /> Focus Timer</div>
+            <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', flexDirection: 'column', marginBottom: '2.2rem', width: 260, height: 260, marginLeft: 'auto', marginRight: 'auto' }}>
+              <CircleProgress
+                key={isDark ? 'dark' : 'light'}
+                progress={1 - timeLeft / timerDuration}
+                size={240}
+                strokeWidth={14}
+                bgColor={isDark ? '#444' : '#23243a33'}
+              >
+                <div style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  width: '100%',
+                  height: '100%',
+                  fontSize: 64,
+                  fontWeight: 800,
+                  color: 'var(--accent, #f59e0b)',
+                  textShadow: '0 0 40px var(--accent-glow, #fbbf24)'
+                }}>
+                  {formatTime(timeLeft)}
+                </div>
+              </CircleProgress>
+            </div>
+            <div className="fullscreen-timer-controls">
+              <button className="btn-timer fullscreen" onClick={() => setIsTimerRunning(!isTimerRunning)}>{isTimerRunning ? 'Pause' : 'Start'}</button>
+              <button className="btn-timer fullscreen" onClick={() => { setIsTimerRunning(false); setTimeLeft(timerDuration) }}>Reset</button>
+              <button className="btn-timer fullscreen" onClick={() => setShowTimerSetting(true)}>Set Timer</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal pengaturan timer */}
+      {showTimerSetting && (
+        <div className="fullscreen-timer-overlay" onClick={() => setShowTimerSetting(false)}>
+          <div className="fullscreen-timer-card" onClick={e => e.stopPropagation()} style={{ minWidth: 320, minHeight: 0, padding: '2.5rem 2rem' }}>
+            <div className="fullscreen-timer-label">Set Timer Duration</div>
+            <form style={{ display: 'flex', flexDirection: 'column', gap: 18, alignItems: 'center' }} onSubmit={e => {
+              e.preventDefault();
+              const form = e.target as HTMLFormElement;
+              const min = Number((form.elements.namedItem('minutes') as HTMLInputElement).value);
+              if (min > 0 && min <= 180) {
+                setTimerDuration(min * 60);
+                setTimeLeft(min * 60);
+                setShowTimerSetting(false);
+              }
+            }}>
+              <input name="minutes" type="number" min={1} max={180} defaultValue={Math.round(timerDuration/60)} className="goals-input" style={{ width: 120, textAlign: 'center', fontSize: 22 }} />
+              <button className="btn-timer fullscreen" type="submit">Set</button>
+            </form>
+          </div>
+        </div>
+      )}
 
       <main className="editor-area">
         <header className="editor-header">
@@ -467,7 +597,39 @@ function App() {
         {activeView === 'dashboard' ? (
           <div className="dashboard-view">
             <div className="dashboard-title">
-              <h1>Deadline</h1>
+              <h1>Tasks & Deadlines</h1>
+            </div>
+
+            {/* Daily/Weekly Goals Section */}
+            <div className="goals-section">
+              <div className="goals-header">
+                <span className={goalMode === 'daily' ? 'goals-mode active' : 'goals-mode'} onClick={() => setGoalMode('daily')}>Daily</span>
+                <span className={goalMode === 'weekly' ? 'goals-mode active' : 'goals-mode'} onClick={() => setGoalMode('weekly')}>Weekly</span>
+                <span style={{ flex: 1 }} />
+                <span className="goals-progress-label">Progress: {progress}%</span>
+              </div>
+              <div className="goals-progress-bar-bg">
+                <div className="goals-progress-bar" style={{ width: progress + '%' }} />
+              </div>
+              <form className="goals-add-form" onSubmit={e => {
+                e.preventDefault();
+                if (goalInput.trim()) {
+                  setGoals([...goals, { text: goalInput.trim(), done: false, mode: goalMode }]);
+                  setGoalInput('');
+                }
+              }}>
+                <input className="goals-input" placeholder={goalMode === 'daily' ? 'Add daily goal...' : 'Add weekly goal...'} value={goalInput} onChange={e => setGoalInput(e.target.value)} />
+                <button className="goals-add-btn" type="submit">Add</button>
+              </form>
+              <ul className="goals-list">
+                {filteredGoals.length === 0 && <li className="goals-empty">No goals yet.</li>}
+                {filteredGoals.map((g, i) => (
+                  <li key={i} className={g.done ? 'goals-item done' : 'goals-item'} onClick={() => setGoals(goals => goals.map((goal, idx) => idx === goals.findIndex((gg, ii) => ii === i && gg.mode === goalMode) ? { ...goal, done: !goal.done } : goal))}>
+                    <span className="goals-check">{g.done ? '✔' : ''}</span>
+                    <span className="goals-text">{g.text}</span>
+                  </li>
+                ))}
+              </ul>
             </div>
 
             <div className="view-tabs">
@@ -492,7 +654,7 @@ function App() {
                             {(provided) => (
                               <div ref={provided.innerRef} {...provided.droppableProps}>
                                 <div className="task-list-header">
-                                  <span>Aa Meeting name</span>
+                                  <span>Meeting / Task Name</span>
                                   <span>Date</span>
                                 </div>
                                 {folderTasks.map((task, index) => (
@@ -506,7 +668,7 @@ function App() {
                                       >
                                         <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flex: 1 }}>
                                           <input type="checkbox" className="custom-checkbox" checked={task.status === 'Done'} onChange={() => toggleTaskStatus(task.id)} />
-                                          <span className="task-title">{task.title}</span>
+                                          <span className="task-title" title={task.title}>{task.title}</span>
                                         </div>
                                         <span className="task-date" style={{ marginRight: '1rem' }}>{new Date(task.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</span>
                                         <button onClick={() => deleteTask(task.id)} className="btn-icon-danger"><PiTrash /></button>
@@ -516,7 +678,7 @@ function App() {
                                 ))}
                                 {provided.placeholder}
                                 <button className="btn-inline-add" onClick={(e) => { e.stopPropagation(); openTaskModal(folder.name, ''); }}>
-                                  <PiPlus style={{ marginRight: '4px' }} /> New meeting
+                                  <PiPlus style={{ marginRight: '4px' }} /> New Task
                                 </button>
                               </div>
                             )}
@@ -526,7 +688,7 @@ function App() {
                     );
                   })}
                   <button className="btn-inline-add" style={{ marginTop: '2rem' }} onClick={createNewFolder}>
-                    <PiPlus style={{ marginRight: '4px' }} /> Add new category group
+                    <PiPlus style={{ marginRight: '4px' }} /> Add new category
                   </button>
                 </div>
               </DragDropContext>
@@ -534,11 +696,13 @@ function App() {
 
             {dashboardTab === 'calendar' && (
               <div className="calendar-views">
-                {/* Navigasi Bulan */}
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '1rem', marginBottom: '1rem' }}>
-                  <button className="btn-timer" onClick={goToPrevMonth}>&lt;</button>
-                  <h3 style={{ margin: 0 }}>{monthNames[calendarMonth]} {calendarYear}</h3>
-                  <button className="btn-timer" onClick={goToNextMonth}>&gt;</button>
+                <div className="calendar-nav-bar">
+                  <button className="btn-timer" onClick={() => setCalendarYear(y => y - 1)}>&lt;&lt;</button>
+                  <button className="btn-timer" onClick={() => setCalendarMonth(m => m === 0 ? 11 : m - 1)}>&lt;</button>
+                  <span className="calendar-month-label">{monthNames[calendarMonth]}</span>
+                  <span className="calendar-year-label">{calendarYear}</span>
+                  <button className="btn-timer" onClick={() => setCalendarMonth(m => m === 11 ? 0 : m + 1)}>&gt;</button>
+                  <button className="btn-timer" onClick={() => setCalendarYear(y => y + 1)}>&gt;&gt;</button>
                 </div>
                 <div className="calendar-header-row">
                   {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(d => <div key={d}>{d}</div>)}
@@ -550,18 +714,15 @@ function App() {
                     const dayTasks = tasks.filter(t => t.date === dateStr)
                     const isToday = day === today.getDate() && calendarMonth === today.getMonth() && calendarYear === today.getFullYear();
 
-                    // Drag & drop event antar tanggal
                     const onDropEvent = (e: React.DragEvent<HTMLDivElement>) => {
                       e.preventDefault();
                       const taskId = e.dataTransfer.getData('text/event-id');
-                      if (!taskId) return;
                       setTasks(prev => prev.map(t => t.id === taskId ? { ...t, date: dateStr } : t));
                     };
                     const onDragOver = (e: React.DragEvent<HTMLDivElement>) => {
                       e.preventDefault();
                     };
 
-                    // Deteksi event penting/urgent
                     const isImportant = dayTasks.some(t => /urgent|penting/i.test(t.title));
                     return (
                       <div
@@ -578,39 +739,61 @@ function App() {
                             <span className="event-count-badge">{dayTasks.length}</span>
                           )}
                         </div>
-                        {dayTasks.slice(0, 2).map(t => (
-                          <div
-                            key={t.id}
-                            className="event-badge"
-                            draggable
-                            onDragStart={e => e.dataTransfer.setData('text/event-id', t.id)}
-                          >
-                            {t.title}
-                          </div>
-                        ))}
-                        {dayTasks.length > 2 && <div className="event-badge more-badge">+{dayTasks.length - 2} more</div>}
+                        {dayTasks.slice(0, 4).map((t: Task) => {
+                          const folderColor = folders.find(f => f.name === t.category)?.color || '#6366f1';
+                          return (
+                            <div
+                              key={t.id}
+                              className="event-badge"
+                              draggable
+                              onDragStart={e => e.dataTransfer.setData('text/event-id', t.id)}
+                              style={{ background: folderColor, color: '#fff' }}
+                              title={t.title}
+                            >
+                              {t.title}
+                            </div>
+                          );
+                        })}
+                        {dayTasks.length > 4 && <div className="event-badge more-badge">+{dayTasks.length - 4} more</div>}
                       </div>
                     )
                   })}
-                      {/* Popover event detail per tanggal */}
-                      {eventPopover.isOpen && (
-                        <div className="modal-overlay transparent" onClick={closeEventPopover}>
-                          <div className="event-popover" style={calculatePopoverPosition(eventPopover.target)} onClick={e => e.stopPropagation()}>
-                            <h4 className="quick-add-title">Event pada {new Date(eventPopover.date).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })}</h4>
-                            <div style={{ marginBottom: 8 }}>
-                              {tasks.filter(t => t.date === eventPopover.date).length === 0 && <div style={{ color: '#888', fontSize: 14 }}>Tidak ada event</div>}
-                              {tasks.filter(t => t.date === eventPopover.date).map(t => (
-                                <div key={t.id} className="event-popover-row">
-                                  <span>{t.title}</span>
-                                  <button className="btn-icon" title="Edit" onClick={() => { setTaskModal({ isOpen: true, defaultCategory: t.category, defaultDate: t.date }); closeEventPopover(); }}><PiPencilSimple /></button>
-                                  <button className="btn-icon-danger" title="Hapus" onClick={() => { setDeleteTaskModal({ isOpen: true, taskId: t.id, taskTitle: t.title }); closeEventPopover(); }}><PiTrash /></button>
-                                </div>
-                              ))}
+
+                  {/* EVENT POPOVER (Dibungkus dengan rapi di sini) */}
+                  {eventPopover.isOpen && (
+                    <div className="modal-overlay transparent" onClick={closeEventPopover}>
+                      <div className="event-popover" style={calculatePopoverPosition(eventPopover.target)} onClick={e => e.stopPropagation()}>
+                        <h4 className="quick-add-title">Tasks on {new Date(eventPopover.date).toLocaleDateString('en-US', { day: 'numeric', month: 'long', year: 'numeric' })}</h4>
+                        <div style={{ marginBottom: 8 }}>
+                          {tasks.filter(t => t.date === eventPopover.date).length === 0 && <div style={{ color: '#888', fontSize: 14 }}>No tasks</div>}
+                          {tasks.filter(t => t.date === eventPopover.date).map(task => (
+                            <div key={task.id} className="event-card">
+                              <div className="event-card-header">
+                                <span className="event-card-title" title={task.title}>{task.title}</span>
+                                <button className="event-card-edit" title="Edit" onClick={() => { setEditEventModal({ isOpen: true, event: task }); closeEventPopover(); }}>
+                                  <PiPencilSimple style={{ marginRight: 6 }} /> Edit
+                                </button>
+                                <button className="event-card-open" title="Open" onClick={() => { setOpenEventDetail({ isOpen: true, event: task }); closeEventPopover(); }}>
+                                  <PiNotePencil style={{ marginRight: 6 }} /> Details
+                                </button>
+                                <button className="event-card-delete" title="Delete" onClick={() => { setDeleteTaskModal({ isOpen: true, taskId: task.id, taskTitle: task.title }); closeEventPopover(); }}>
+                                  <PiTrash style={{ marginRight: 6 }} /> Delete
+                                </button>
+                              </div>
+                              <div className="event-card-meta">
+                                <span className="event-card-category">Category: {task.category}</span>
+                                <span className="event-card-status">Status: {task.status}</span>
+                              </div>
                             </div>
-                            <button className="btn-inline-add" onClick={() => { openQuickAdd({ currentTarget: eventPopover.target } as any, eventPopover.date); closeEventPopover(); }}><PiPlus style={{ marginRight: 4 }} />Tambah Event</button>
-                          </div>
+                          ))}
                         </div>
-                      )}
+                        <button className="btn-inline-add" onClick={() => { openQuickAdd({ currentTarget: eventPopover.target } as any, eventPopover.date); closeEventPopover(); }}>
+                          <PiPlus style={{ marginRight: 4 }} />Add Event
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
                 </div>
               </div>
             )}
@@ -619,7 +802,7 @@ function App() {
           <div className="document-container">
             <div className="document-cover" style={{ background: getCoverGradient(activeNote?.id || '0') }}>
               <div className="cover-actions">
-                <button className="btn-cover-action"><PiImage style={{ marginRight: '6px' }} /> Ubah Cover</button>
+                <button className="btn-cover-action"><PiImage style={{ marginRight: '6px' }} /> Change Cover</button>
               </div>
             </div>
 
@@ -632,24 +815,25 @@ function App() {
               <input className="document-title-input" value={activeNote?.title || ''} onChange={onNoteTitleChange} placeholder="Untitled" />
 
               <div className="document-meta">
-                <span className="meta-item"><PiCalendar style={{ marginRight: '4px' }} /> Hari ini</span>
-                <span className="meta-item"><PiTag style={{ marginRight: '4px' }} /> Tambah Tag</span>
+                <span className="meta-item"><PiCalendar style={{ marginRight: '4px' }} /> Today</span>
+                <span className="meta-item"><PiTag style={{ marginRight: '4px' }} /> Add Tag</span>
               </div>
 
               <div className="editor-wrapper">
-                {activeNote?.type === 'canvas' ? (<div className="canvas-placeholder"><PiSquaresFour size={48} /><h3>Canvas Mode</h3><p>Area ini untuk menggambar diagram.</p></div>) : (<BlockNoteView editor={editor} theme={isDarkMode ? 'dark' : 'light'} />)}
+                {activeNote?.type === 'canvas' ? (<div className="canvas-placeholder"><PiSquaresFour size={48} /><h3>Canvas Mode</h3><p>Draw diagrams and create visuals here.</p></div>) : (<BlockNoteView editor={editor} theme={isDarkMode ? 'dark' : 'light'} />)}
               </div>
             </article>
           </div>
         )}
       </main>
 
+      {/* --- ALL MODALS ARE PLACED HERE NEATLY --- */}
       {quickAddPopover.isOpen && (
         <div className="modal-overlay transparent" onClick={() => setQuickAddPopover({ isOpen: false, target: null, date: '' })}>
           <div className="quick-add-popover" style={calculatePopoverPosition(quickAddPopover.target)} onClick={e => e.stopPropagation()}>
-            <h4 className="quick-add-title">Tambah Tugas Cepat</h4>
+            <h4 className="quick-add-title">Quick Add Task</h4>
             <form onSubmit={handleQuickAddSubmit}>
-              <input name="title" className="form-control" placeholder="Contoh: Mengerjakan laporan" autoFocus required />
+              <input name="title" className="form-control" placeholder="Example: Finish report" autoFocus required />
               <div className="select-wrapper">
                 <select name="category" className="form-control" defaultValue={activeFolder?.name || (folders[0]?.name || '')}>
                   {folders.map(f => <option key={f.id} value={f.name}>{f.name}</option>)}
@@ -657,10 +841,88 @@ function App() {
                 <PiCaretDown className="select-icon" />
               </div>
               <div className="modal-actions">
-                <button type="button" className="btn-cancel" onClick={() => setQuickAddPopover({ isOpen: false, target: null, date: '' })}>Batal</button>
-                <button type="submit" className="btn-primary">Simpan</button>
+                <button type="button" className="btn-cancel" onClick={() => setQuickAddPopover({ isOpen: false, target: null, date: '' })}>Cancel</button>
+                <button type="submit" className="btn-primary">Save</button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {editEventModal.isOpen && editEventModal.event && (
+        <div className="modal-overlay" onClick={() => setEditEventModal({ isOpen: false, event: null })}>
+          <div className="modal-content" onClick={e => e.stopPropagation()}>
+            <h3 style={{ marginTop: 0 }}>Edit Event</h3>
+            <form onSubmit={handleEditEventSubmit}>
+              <div className="form-group">
+                <label>Title</label>
+                <input name="title" className="form-control" defaultValue={editEventModal.event.title} required />
+              </div>
+              <div className="form-group">
+                <label>Category</label>
+                <select name="category" className="form-control" defaultValue={editEventModal.event.category}>
+                  {folders.map(f => <option key={f.id} value={f.name}>{f.name}</option>)}
+                </select>
+              </div>
+              <div className="form-group">
+                <label>Date</label>
+                <DatePicker
+                  selected={new Date(editEventModal.event.date)}
+                  onChange={(date: Date | null) => {
+                    if (date) {
+                      setEditEventModal(prev => ({
+                        ...prev,
+                        event: prev.event ? { ...prev.event, date: date.toISOString().split('T')[0] } : null
+                      }));
+                    }
+                  }}
+                  dateFormat="yyyy-MM-dd"
+                  customInput={<CustomDateInput />}
+                />
+              </div>
+              <div className="form-group">
+                <label>Status</label>
+                <select name="status" className="form-control" defaultValue={editEventModal.event.status}>
+                  <option value="To Do">To Do</option>
+                  <option value="Done">Done</option>
+                </select>
+              </div>
+              <div className="modal-actions">
+                <button type="button" className="btn-cancel" onClick={() => setEditEventModal({ isOpen: false, event: null })}>Cancel</button>
+                <button type="submit" className="btn-primary">Save</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {openEventDetail.isOpen && openEventDetail.event && (
+        <div className="modal-overlay" onClick={() => setOpenEventDetail({ isOpen: false, event: null })}>
+          <div className="modal-content" onClick={e => e.stopPropagation()}>
+            <h3 style={{ marginTop: 0 }}>Event Details</h3>
+            <div className="event-detail-card">
+              <div style={{ fontWeight: 700, fontSize: '1.2rem', marginBottom: 8 }} title={openEventDetail.event.title}>{openEventDetail.event.title}</div>
+              <div style={{ color: 'var(--text-secondary)', marginBottom: 8 }}>
+                Category: {openEventDetail.event.category} | Date: {openEventDetail.event.date} | Status: {openEventDetail.event.status}
+              </div>
+              <div className="form-group">
+                <label>Notes</label>
+                <textarea
+                  className="form-control"
+                  rows={5}
+                  placeholder="Write notes..."
+                  value={eventNotes[openEventDetail.event.id] || ''}
+                  onChange={e => {
+                    const val = e.target.value;
+                    setEventNotes(prev => ({ ...prev, [openEventDetail.event!.id]: val }));
+                  }}
+                />
+                <span style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 2 }}>Autosaved</span>
+              </div>
+              <div className="modal-actions">
+                <button className="btn-cancel" onClick={() => setOpenEventDetail({ isOpen: false, event: null })}>Close</button>
+              </div>
+            </div>
           </div>
         </div>
       )}
@@ -668,16 +930,180 @@ function App() {
       {contextMenu && (
         <div className="context-menu" style={{ top: contextMenu.y, left: contextMenu.x }} onClick={(e) => e.stopPropagation()}>
           <div className="context-item" onClick={() => handleAddNote(contextMenu.folderId)}>
-            <PiFilePlus style={{ marginRight: '8px' }} /> Tambah Catatan
+            <PiFilePlus style={{ marginRight: '8px' }} /> Add Note
           </div>
           <div className="context-item" onClick={() => handleAddCanvas(contextMenu.folderId)}>
-            <PiSquaresFour style={{ marginRight: '8px' }} /> Tambah Canvas
+            <PiSquaresFour style={{ marginRight: '8px' }} /> Add Canvas
           </div>
           <div className="context-item" onClick={() => openRenameModal(contextMenu.folderId)}>
-            <PiPencilSimple style={{ marginRight: '8px' }} /> Ubah Nama
+            <PiPencilSimple style={{ marginRight: '8px' }} /> Edit
           </div>
           <div className="context-item delete" onClick={() => openDeleteModal(contextMenu.folderId)}>
-            <PiTrash style={{ marginRight: '8px' }} /> Hapus
+            <PiTrash style={{ marginRight: '8px' }} /> Delete
+          </div>
+        </div>
+      )}
+
+      {noteContextMenu && (
+        <div className="context-menu" style={{ top: noteContextMenu.y, left: noteContextMenu.x }} onClick={(e) => e.stopPropagation()}>
+          <div className="context-item" onClick={() => setRenameNoteModal({ isOpen: true, folderId: noteContextMenu.folderId, noteId: noteContextMenu.noteId, currentTitle: folders.find(f => f.id === noteContextMenu.folderId)?.notes.find(n => n.id === noteContextMenu.noteId)?.title || '' })}>
+            <PiPencilSimple style={{ marginRight: '8px' }} /> Rename
+          </div>
+          <div className="context-item delete" onClick={() => setDeleteNoteModal({ isOpen: true, folderId: noteContextMenu.folderId, noteId: noteContextMenu.noteId, noteTitle: folders.find(f => f.id === noteContextMenu.folderId)?.notes.find(n => n.id === noteContextMenu.noteId)?.title || '' })}>
+            <PiTrash style={{ marginRight: '8px' }} /> Delete
+          </div>
+        </div>
+      )}
+
+      {renameModal.isOpen && (
+        <div className="modal-overlay" onClick={() => setRenameModal({ isOpen: false, folderId: '', currentName: '', currentColor: '' })}>
+          <div className="modal-content" onClick={e => e.stopPropagation()}>
+            <h3 style={{ marginTop: 0 }}>Edit Folder</h3>
+            <form onSubmit={handleRenameFolder}>
+              <div className="form-group">
+                <label>Folder Name</label>
+                <input name="newName" className="form-control" autoFocus required defaultValue={renameModal.currentName} />
+              </div>
+              <div className="form-group">
+                <label>Folder Color</label>
+                <input name="folderColor" type="color" className="form-control" defaultValue={renameModal.currentColor} style={{ width: 48, height: 32, padding: 0, border: 'none', background: 'none' }} />
+              </div>
+              <div className="modal-actions">
+                <button type="button" className="btn-cancel" onClick={() => setRenameModal({ isOpen: false, folderId: '', currentName: '', currentColor: '' })}>Cancel</button>
+                <button type="submit" className="btn-primary">Save</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {renameNoteModal.isOpen && (
+        <div className="modal-overlay" onClick={() => setRenameNoteModal({ isOpen: false, folderId: '', noteId: '', currentTitle: '' })}>
+          <div className="modal-content" onClick={e => e.stopPropagation()}>
+            <h3 style={{ marginTop: 0 }}>Edit Note</h3>
+            <form onSubmit={handleRenameNoteSubmit}>
+              <div className="form-group">
+                <label>Note Name</label>
+                <input name="newNoteTitle" className="form-control" autoFocus required defaultValue={renameNoteModal.currentTitle} />
+              </div>
+              <div className="modal-actions">
+                <button type="button" className="btn-cancel" onClick={() => setRenameNoteModal({ isOpen: false, folderId: '', noteId: '', currentTitle: '' })}>Cancel</button>
+                <button type="submit" className="btn-primary">Save</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {deleteModal.isOpen && (
+        <div className="modal-overlay" onClick={() => setDeleteModal({ isOpen: false, folderId: '', folderName: '' })}>
+          <div className="modal-content" onClick={e => e.stopPropagation()}>
+            <h3 style={{ marginTop: 0 }}>Delete Folder?</h3>
+            <p style={{ color: 'var(--text-secondary)', fontSize: '0.95rem', lineHeight: '1.5' }}>
+              Are you sure you want to delete the folder <strong>{deleteModal.folderName}</strong>? <br />
+              All tasks and notes within it will be permanently deleted.
+            </p>
+            <div className="modal-actions">
+              <button className="btn-cancel" onClick={() => setDeleteModal({ isOpen: false, folderId: '', folderName: '' })}>Cancel</button>
+              <button className="btn-danger" onClick={confirmDeleteFolder}>Delete</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {deleteNoteModal.isOpen && (
+        <div className="modal-overlay" onClick={() => setDeleteNoteModal({ isOpen: false, folderId: '', noteId: '', noteTitle: '' })}>
+          <div className="modal-content" onClick={e => e.stopPropagation()}>
+            <h3 style={{ marginTop: 0 }}>Delete Note?</h3>
+            <p style={{ color: 'var(--text-secondary)', fontSize: '0.95rem', lineHeight: '1.5' }}>
+              Are you sure you want to delete the note <strong>{deleteNoteModal.noteTitle}</strong>? <br />
+              This action cannot be undone.
+            </p>
+            <div className="modal-actions">
+              <button className="btn-cancel" onClick={() => setDeleteNoteModal({ isOpen: false, folderId: '', noteId: '', noteTitle: '' })}>Cancel</button>
+              <button className="btn-danger" onClick={confirmDeleteNote}>Delete</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {deleteTaskModal.isOpen && (
+        <div className="modal-overlay" onClick={() => setDeleteTaskModal({ isOpen: false, taskId: '', taskTitle: '' })}>
+          <div className="modal-content" onClick={e => e.stopPropagation()}>
+            <h3 style={{ marginTop: 0 }}>Delete Task?</h3>
+            <p style={{ color: 'var(--text-secondary)', fontSize: '0.95rem', lineHeight: '1.5' }}>
+              Are you sure you want to delete the task <strong>{deleteTaskModal.taskTitle}</strong>?
+            </p>
+            <div className="modal-actions">
+              <button className="btn-cancel" onClick={() => setDeleteTaskModal({ isOpen: false, taskId: '', taskTitle: '' })}>Cancel</button>
+              <button className="btn-danger" onClick={confirmDeleteTask}>Delete</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {inputModal.isOpen && (
+        <div className="modal-overlay" onClick={() => setInputModal({ ...inputModal, isOpen: false })}>
+          <div className="modal-content" onClick={e => e.stopPropagation()}>
+            <h3 style={{ marginTop: 0 }}>
+              {inputModal.mode === 'create_folder' ? 'New Folder' : inputModal.mode === 'create_note' ? 'New Note' : 'New Canvas'}
+            </h3>
+            <form onSubmit={handleInputSubmit}>
+              <div className="form-group">
+                <label>Name</label>
+                <input name="inputValue" className="form-control" autoFocus required placeholder={inputModal.mode === 'create_folder' ? 'Folder Name...' : 'Title...'} />
+              </div>
+              {inputModal.mode === 'create_folder' && (
+                <div className="form-group">
+                  <label>Folder Color</label>
+                  <input name="inputColor" type="color" className="form-control" defaultValue="#6366f1" style={{ width: 48, height: 32, padding: 0, border: 'none', background: 'none' }} />
+                </div>
+              )}
+              <div className="modal-actions">
+                <button type="button" className="btn-cancel" onClick={() => setInputModal({ ...inputModal, isOpen: false })}>Cancel</button>
+                <button type="submit" className="btn-primary">Create</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {taskModal.isOpen && (
+        <div className="modal-overlay" onClick={() => setTaskModal({ ...taskModal, isOpen: false })}>
+          <div className="modal-content" onClick={e => e.stopPropagation()}>
+            <h3 style={{ marginTop: 0 }}>Add New Task</h3>
+            <form onSubmit={handleTaskSubmit}>
+              <div className="form-group">
+                <label>Task Name</label>
+                <input name="title" className="form-control" autoFocus required placeholder="Example: Thesis Chapter 2" />
+              </div>
+              <div className="form-group">
+                <label>Category</label>
+                <div className="select-wrapper">
+                  <select name="category" className="form-control" defaultValue={taskModal.defaultCategory || (folders[0]?.name || '')}>
+                    {folders.length === 0 ? <option value="">No categories</option> : folders.map(f => <option key={f.id} value={f.name}>{f.name}</option>)}
+                  </select>
+                  <PiCaretDown className="select-icon" />
+                </div>
+              </div>
+              <div className="form-group">
+                <label>Date</label>
+                <DatePicker
+                  selected={new Date(taskModal.defaultDate)}
+                  onChange={(date: Date | null) => {
+                    if (date) {
+                      setTaskModal(prev => ({ ...prev, defaultDate: date.toISOString().split('T')[0] }));
+                    }
+                  }}
+                  dateFormat="yyyy-MM-dd"
+                  customInput={<CustomDateInput />}
+                />
+              </div>
+              <div className="modal-actions">
+                <button type="button" className="btn-cancel" onClick={() => setTaskModal({ ...taskModal, isOpen: false })}>Cancel</button>
+                <button type="submit" className="btn-primary">Save</button>
+              </div>
+            </form>
           </div>
         </div>
       )}
@@ -693,151 +1119,6 @@ function App() {
           </div>
         ))}
       </div>
-
-      {noteContextMenu && (
-        <div className="context-menu" style={{ top: noteContextMenu.y, left: noteContextMenu.x }} onClick={(e) => e.stopPropagation()}>
-          <div className="context-item" onClick={() => setRenameNoteModal({ isOpen: true, folderId: noteContextMenu.folderId, noteId: noteContextMenu.noteId, currentTitle: folders.find(f => f.id === noteContextMenu.folderId)?.notes.find(n => n.id === noteContextMenu.noteId)?.title || '' })}>
-            <PiPencilSimple style={{ marginRight: '8px' }} /> Ubah Nama
-          </div>
-          <div className="context-item delete" onClick={() => setDeleteNoteModal({ isOpen: true, folderId: noteContextMenu.folderId, noteId: noteContextMenu.noteId, noteTitle: folders.find(f => f.id === noteContextMenu.folderId)?.notes.find(n => n.id === noteContextMenu.noteId)?.title || '' })}>
-            <PiTrash style={{ marginRight: '8px' }} /> Hapus
-          </div>
-        </div>
-      )}
-
-      {renameModal.isOpen && (
-        <div className="modal-overlay" onClick={() => setRenameModal({ isOpen: false, folderId: '', currentName: '' })}>
-          <div className="modal-content" onClick={e => e.stopPropagation()}>
-            <h3 style={{ marginTop: 0 }}>Ubah Nama Folder</h3>
-            <form onSubmit={handleRenameFolder}>
-              <div className="form-group">
-                <label>Nama Folder</label>
-                <input name="newName" className="form-control" autoFocus required defaultValue={renameModal.currentName} />
-              </div>
-              <div className="modal-actions">
-                <button type="button" className="btn-cancel" onClick={() => setRenameModal({ isOpen: false, folderId: '', currentName: '' })}>Cancel</button>
-                <button type="submit" className="btn-primary">Simpan</button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {renameNoteModal.isOpen && (
-        <div className="modal-overlay" onClick={() => setRenameNoteModal({ isOpen: false, folderId: '', noteId: '', currentTitle: '' })}>
-          <div className="modal-content" onClick={e => e.stopPropagation()}>
-            <h3 style={{ marginTop: 0 }}>Ubah Nama Catatan</h3>
-            <form onSubmit={handleRenameNoteSubmit}>
-              <div className="form-group">
-                <label>Nama Catatan</label>
-                <input name="newNoteTitle" className="form-control" autoFocus required defaultValue={renameNoteModal.currentTitle} />
-              </div>
-              <div className="modal-actions">
-                <button type="button" className="btn-cancel" onClick={() => setRenameNoteModal({ isOpen: false, folderId: '', noteId: '', currentTitle: '' })}>Cancel</button>
-                <button type="submit" className="btn-primary">Simpan</button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {deleteModal.isOpen && (
-        <div className="modal-overlay" onClick={() => setDeleteModal({ isOpen: false, folderId: '', folderName: '' })}>
-          <div className="modal-content" onClick={e => e.stopPropagation()}>
-            <h3 style={{ marginTop: 0 }}>Hapus Folder?</h3>
-            <p style={{ color: 'var(--text-secondary)', fontSize: '0.95rem', lineHeight: '1.5' }}>
-              Apakah Anda yakin ingin menghapus folder <strong>{deleteModal.folderName}</strong>? <br />
-              Semua tugas dan catatan di dalamnya akan dihapus secara permanen.
-            </p>
-            <div className="modal-actions">
-              <button className="btn-cancel" onClick={() => setDeleteModal({ isOpen: false, folderId: '', folderName: '' })}>Batal</button>
-              <button className="btn-danger" onClick={confirmDeleteFolder}>Hapus</button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {deleteNoteModal.isOpen && (
-        <div className="modal-overlay" onClick={() => setDeleteNoteModal({ isOpen: false, folderId: '', noteId: '', noteTitle: '' })}>
-          <div className="modal-content" onClick={e => e.stopPropagation()}>
-            <h3 style={{ marginTop: 0 }}>Hapus Catatan?</h3>
-            <p style={{ color: 'var(--text-secondary)', fontSize: '0.95rem', lineHeight: '1.5' }}>
-              Apakah Anda yakin ingin menghapus catatan <strong>{deleteNoteModal.noteTitle}</strong>? <br />
-              Tindakan ini tidak dapat dibatalkan.
-            </p>
-            <div className="modal-actions">
-              <button className="btn-cancel" onClick={() => setDeleteNoteModal({ isOpen: false, folderId: '', noteId: '', noteTitle: '' })}>Batal</button>
-              <button className="btn-danger" onClick={confirmDeleteNote}>Hapus</button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {deleteTaskModal.isOpen && (
-        <div className="modal-overlay" onClick={() => setDeleteTaskModal({ isOpen: false, taskId: '', taskTitle: '' })}>
-          <div className="modal-content" onClick={e => e.stopPropagation()}>
-            <h3 style={{ marginTop: 0 }}>Hapus Tugas?</h3>
-            <p style={{ color: 'var(--text-secondary)', fontSize: '0.95rem', lineHeight: '1.5' }}>
-              Apakah Anda yakin ingin menghapus tugas <strong>{deleteTaskModal.taskTitle}</strong>?
-            </p>
-            <div className="modal-actions">
-              <button className="btn-cancel" onClick={() => setDeleteTaskModal({ isOpen: false, taskId: '', taskTitle: '' })}>Batal</button>
-              <button className="btn-danger" onClick={confirmDeleteTask}>Hapus</button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {inputModal.isOpen && (
-        <div className="modal-overlay" onClick={() => setInputModal({ ...inputModal, isOpen: false })}>
-          <div className="modal-content" onClick={e => e.stopPropagation()}>
-            <h3 style={{ marginTop: 0 }}>
-              {inputModal.mode === 'create_folder' ? 'Folder Baru' : inputModal.mode === 'create_note' ? 'Catatan Baru' : 'Canvas Baru'}
-            </h3>
-            <form onSubmit={handleInputSubmit}>
-              <div className="form-group">
-                <label>Nama</label>
-                <input name="inputValue" className="form-control" autoFocus required placeholder={inputModal.mode === 'create_folder' ? 'Nama Folder...' : 'Judul...'} />
-              </div>
-              <div className="modal-actions">
-                <button type="button" className="btn-cancel" onClick={() => setInputModal({ ...inputModal, isOpen: false })}>Batal</button>
-                <button type="submit" className="btn-primary">Buat</button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {taskModal.isOpen && (
-        <div className="modal-overlay" onClick={() => setTaskModal({ ...taskModal, isOpen: false })}>
-          <div className="modal-content" onClick={e => e.stopPropagation()}>
-            <h3 style={{ marginTop: 0 }}>Tambah Data Baru</h3>
-            <form onSubmit={handleTaskSubmit}>
-              <div className="form-group">
-                <label>Nama Meeting / Tugas</label>
-                <input name="title" className="form-control" autoFocus required placeholder="Contoh: Skripsi Bab 2" />
-              </div>
-              <div className="form-group">
-                <label>Kategori</label>
-                <div className="select-wrapper">
-                  <select name="category" className="form-control" defaultValue={taskModal.defaultCategory || (folders[0]?.name || '')}>
-                    {folders.map(f => <option key={f.id} value={f.name}>{f.name}</option>)}
-                  </select>
-                  <PiCaretDown className="select-icon" />
-                </div>
-              </div>
-              <div className="form-group">
-                <label>Tanggal</label>
-                <input type="date" name="date" className="form-control" defaultValue={taskModal.defaultDate} required />
-              </div>
-              <div className="modal-actions">
-                <button type="button" className="btn-cancel" onClick={() => setTaskModal({ ...taskModal, isOpen: false })}>Batal</button>
-                <button type="submit" className="btn-primary">Simpan</button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
     </div>
   )
 }

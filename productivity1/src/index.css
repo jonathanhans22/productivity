@@ -74,7 +74,7 @@ body {
   border: 1px solid var(--border-subtle);
 }
 
-/* --- TAMBAHAN UI MODERN --- */
+/* --- MODERN UI ADDITIONS --- */
 
 /* 1. Animasi Masuk (Fade In) agar aplikasi terasa halus saat dimuat */
 @keyframes fadeIn {
@@ -150,7 +150,7 @@ input:focus {
   font-size: 2rem;
   font-weight: 700;
   font-variant-numeric: tabular-nums;
-  /* Agar angka tidak bergeser saat berubah */
+  /* Prevent numbers from shifting when changing */
   color: var(--accent);
   margin-bottom: 0.75rem;
   text-shadow: 0 0 20px var(--accent-glow);
@@ -290,9 +290,13 @@ input:focus {
   padding: 2px 6px;
   border-radius: 4px;
   color: white;
-  white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  display: block;
+  cursor: help;
+  width: 100px;
+  white-space: nowrap;
+  box-sizing: border-box;
 }
 
 .event-badge.red {
@@ -303,7 +307,7 @@ input:focus {
   background: #3b82f6;
 }
 
-/* 8. Styles untuk Fitur Tambah & Animasi */
+/* 8. Styles for Add Feature & Animations */
 .btn-add-folder {
   width: 100%;
   background: transparent;
