@@ -4,17 +4,44 @@ import DatePicker from 'react-datepicker'
 import 'react-datepicker/dist/react-datepicker.css'
 import { useCreateBlockNote } from '@blocknote/react'
 import { BlockNoteView } from '@blocknote/mantine'
-import { DragDropContext, Droppable, Draggable, type DropResult, type DroppableProps } from 'react-beautiful-dnd'
+import { DragDropContext, Droppable, Draggable, type DropResult, type DroppableProps } from '@hello-pangea/dnd'
 import { PiTelevision, PiFolder, PiNotePencil, PiStack, PiCalendar, PiTimer, PiMoon, PiSun, PiPlus, PiList, PiPencilSimple, PiTrash, PiCaretDown, PiFilePlus, PiSquaresFour, PiImage, PiSmiley, PiTag, PiCheckCircle, PiWarningCircle, PiX } from 'react-icons/pi'
 import '@blocknote/core/fonts/inter.css'
 import '@blocknote/mantine/style.css'
 import './App.css'
+import { supabase } from './lib/supabase'
 
-type Note = { id: string; title: string; type: 'note' | 'canvas' }
+// 1. Tipe Data Diperbarui dengan 'content'
+type Note = { id: string; title: string; type: 'note' | 'canvas'; content?: any }
 type Folder = { id: string; name: string; isOpen: boolean; notes: Note[]; color: string }
-type Task = { id: string; title: string; date: string; category: 'University' | 'Excel' | 'Project' | (string & {}); status: string }
+type Task = { id: string; title: string; date: string; category: string; status: string }
 
-// Komponen Input Tanggal Custom agar bisa diklik dan muncul pop-up kalender
+// 2. Komponen Khusus untuk Editor agar Auto-Save ke Supabase
+function EditorWrapper({ note, isDarkMode }: { note: Note, isDarkMode: boolean }) {
+  // Parse konten dari Supabase ke JSON yang dipahami BlockNote
+  const initialContent = note.content && typeof note.content === 'string' 
+    ? JSON.parse(note.content) 
+    : (typeof note.content === 'object' ? note.content : undefined);
+
+  const editor = useCreateBlockNote({ initialContent });
+
+  const handleEditorChange = async () => {
+    // Ambil isi dokumen saat ini
+    const content = JSON.stringify(editor.document);
+    // Auto-save diam-diam ke Supabase
+    await supabase.from('notes').update({ content }).eq('id', note.id);
+  };
+
+  return (
+    <BlockNoteView 
+      editor={editor} 
+      theme={isDarkMode ? 'dark' : 'light'} 
+      onChange={handleEditorChange} 
+    />
+  );
+}
+
+// Komponen Input Tanggal Custom
 const CustomDateInput = forwardRef<HTMLInputElement, any>(({ value, onClick }, ref) => (
   <div style={{ position: 'relative', display: 'flex', alignItems: 'center', width: '100%' }}>
     <PiCalendar style={{ position: 'absolute', left: '12px', color: 'var(--text-secondary)', fontSize: '1.2rem', pointerEvents: 'none', zIndex: 1 }} />
@@ -40,26 +67,63 @@ export const StrictModeDroppable = ({ children, ...props }: DroppableProps) => {
       setEnabled(false);
     };
   }, []);
-  if (!enabled) {
-    return null;
-  }
+  if (!enabled) return null;
   return <Droppable {...props}>{children}</Droppable>;
 };
 
 function App() {
-  // 1. PINDAHKAN INISIALISASI KE PALING ATAS
   const [isSidebarOpen, setIsSidebarOpen] = useState(true)
   const [isDarkMode, setIsDarkMode] = useState(true)
 
-  // Deteksi dark mode untuk CircleProgress
   const isDark = isDarkMode || document.documentElement.getAttribute('data-theme') === 'dark';
-  
-  // State untuk daily/weekly goals
+
+  // State Data Kosong (Akan diisi otomatis dari DB)
+  const [folders, setFolders] = useState<Folder[]>([])
+  const [tasks, setTasks] = useState<Task[]>([])
+  const [goals, setGoals] = useState<{ id: string; text: string; done: boolean; mode: 'daily' | 'weekly' }[]>([]);
+
+  // Mengambil Data dari Supabase Saat Aplikasi Dibuka
+  useEffect(() => {
+    fetchData();
+  }, []);
+
+  const fetchData = async () => {
+    // Fetch Tasks
+    const { data: tasksData } = await supabase.from('tasks').select('*');
+    if (tasksData) setTasks(tasksData as Task[]);
+
+    // Fetch Goals
+    const { data: goalsData } = await supabase.from('goals').select('*').order('created_at', { ascending: true });
+    if (goalsData) {
+      setGoals(goalsData.map(g => ({ id: g.id, text: g.text, done: g.is_done, mode: g.mode as 'daily' | 'weekly' })));
+    }
+
+    // Fetch Folders beserta Notes dan Content-nya
+    const { data: foldersData } = await supabase
+      .from('folders')
+      .select(`*, notes (*)`)
+      .order('created_at', { ascending: true });
+
+    if (foldersData) {
+      const formattedFolders: Folder[] = foldersData.map((f: any) => ({
+        id: f.id,
+        name: f.name,
+        color: f.color,
+        isOpen: f.is_open,
+        notes: (f.notes || []).map((n: any) => ({
+          id: n.id,
+          title: n.title,
+          type: n.type,
+          content: n.content // Data isi editor
+        }))
+      }));
+      setFolders(formattedFolders);
+    }
+  };
+
   const [goalMode, setGoalMode] = useState<'daily' | 'weekly'>('daily');
-  const [goals, setGoals] = useState<{ text: string; done: boolean; mode: 'daily' | 'weekly' }[]>([]);
   const [goalInput, setGoalInput] = useState('');
 
-  // Filter goals sesuai mode
   const filteredGoals = goals.filter(g => g.mode === goalMode);
   const progress = filteredGoals.length === 0 ? 0 : Math.round(filteredGoals.filter(g => g.done).length / filteredGoals.length * 100);
 
@@ -79,19 +143,6 @@ function App() {
   const [quickAddPopover, setQuickAddPopover] = useState<{ isOpen: boolean; target: HTMLElement | null; date: string }>({ isOpen: false, target: null, date: '' });
   const [activeNote, setActiveNote] = useState<Note | null>(null)
 
-  const [folders, setFolders] = useState<Folder[]>([
-    { id: 'f1', name: 'Personal', isOpen: true, notes: [{ id: 'n1', title: 'Journal', type: 'note' }], color: '#6366f1' },
-    { id: 'f2', name: 'University', isOpen: true, notes: [{ id: 'n2', title: 'Thesis Chapter 1', type: 'note' }], color: '#f59e42' },
-    { id: 'f3', name: 'Excel', isOpen: true, notes: [], color: '#10b981' },
-    { id: 'f4', name: 'Project', isOpen: true, notes: [], color: '#ef4444' }
-  ])
-
-  const [tasks, setTasks] = useState<Task[]>([
-    { id: '1', title: 'Basic to Advanced', date: '2026-01-26', category: 'Excel', status: 'To Do' },
-    { id: '2', title: 'jobseeker toolkit', date: '2026-01-28', category: 'University', status: 'To Do' },
-    { id: '3', title: 'Project Management week 1', date: '2026-02-03', category: 'Project', status: 'To Do' },
-  ])
-
   const [timerDuration, setTimerDuration] = useState(25 * 60)
   const [timeLeft, setTimeLeft] = useState(25 * 60)
   const [isTimerRunning, setIsTimerRunning] = useState(false)
@@ -108,8 +159,6 @@ function App() {
   const [eventNotes, setEventNotes] = useState<Record<string, string>>({});
   const [openEventDetail, setOpenEventDetail] = useState<{ isOpen: boolean; event: Task | null }>({ isOpen: false, event: null });
   const [eventPopover, setEventPopover] = useState<{ isOpen: boolean; target: HTMLElement | null; date: string }>({ isOpen: false, target: null, date: '' });
-
-  const editor = useCreateBlockNote()
 
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', isDarkMode ? 'dark' : 'light')
@@ -146,6 +195,269 @@ function App() {
     setTimeout(() => setToasts(prev => prev.filter(t => t.id !== id)), 3000)
   }
 
+  // === FUNGSI SUPABASE CRUD PINTAR ===
+
+  const handleAddGoal = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    if (goalInput.trim()) {
+      const { data, error } = await supabase.from('goals').insert([{ 
+        text: goalInput.trim(), 
+        mode: goalMode, 
+        is_done: false 
+      }]).select().single();
+      
+      if (data) {
+        setGoals([...goals, { id: data.id, text: data.text, done: data.is_done, mode: data.mode }]);
+        setGoalInput('');
+      } else if (error) showToast('Gagal menambah goal', 'error');
+    }
+  };
+
+  const toggleGoalDone = async (goalId: string, currentStatus: boolean) => {
+    setGoals(goals.map(g => g.id === goalId ? { ...g, done: !currentStatus } : g));
+    await supabase.from('goals').update({ is_done: !currentStatus }).eq('id', goalId);
+  };
+
+  const handleInputSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault()
+    const formData = new FormData(e.currentTarget)
+    const value = formData.get('inputValue') as string
+    const color = formData.get('inputColor') as string || '#6366f1';
+    if (!value) return
+
+    if (inputModal.mode === 'create_folder') {
+      const { data, error } = await supabase.from('folders').insert([{ name: value, color: color, is_open: true }]).select().single();
+      if (data) {
+        setFolders(prev => [...prev, { id: data.id, name: data.name, isOpen: data.is_open, notes: [], color: data.color }])
+        showToast('Folder berhasil dibuat')
+      } else if (error) showToast('Gagal membuat folder', 'error');
+
+    } else if (inputModal.mode === 'create_note' && inputModal.folderId) {
+      const { data, error } = await supabase.from('notes').insert([{ folder_id: inputModal.folderId, title: value, type: 'note' }]).select().single();
+      if (data) {
+        const newNote: Note = { id: data.id, title: data.title, type: data.type }
+        setFolders(prev => prev.map(f => f.id === inputModal.folderId ? { ...f, notes: [...f.notes, newNote], isOpen: true } : f))
+        setActiveNote(newNote)
+        setActiveView('note')
+        showToast('Catatan berhasil dibuat')
+      }
+
+    } else if (inputModal.mode === 'create_canvas' && inputModal.folderId) {
+      const { data, error } = await supabase.from('notes').insert([{ folder_id: inputModal.folderId, title: value, type: 'canvas' }]).select().single();
+      if (data) {
+        const newNote: Note = { id: data.id, title: data.title, type: data.type }
+        setFolders(prev => prev.map(f => f.id === inputModal.folderId ? { ...f, notes: [...f.notes, newNote], isOpen: true } : f))
+        setActiveNote(newNote)
+        setActiveView('note')
+        showToast('Canvas berhasil dibuat')
+      }
+    }
+    setInputModal({ ...inputModal, isOpen: false })
+  }
+
+  const handleTaskSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault()
+    const formData = new FormData(e.currentTarget)
+    const taskData = {
+      title: formData.get('title') as string,
+      category: formData.get('category') as string,
+      date: taskModal.defaultDate,
+      status: 'To Do'
+    };
+
+    const { data, error } = await supabase.from('tasks').insert([taskData]).select().single();
+    if (data) {
+      setTasks([...tasks, data as Task])
+      setTaskModal({ ...taskModal, isOpen: false })
+      showToast('Tugas berhasil ditambahkan')
+    } else if (error) showToast('Gagal menambah tugas', 'error');
+  }
+
+  const handleQuickAddSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    const formData = new FormData(e.currentTarget);
+    const title = formData.get('title') as string;
+    if (!title) return;
+
+    const taskData = {
+      title,
+      category: formData.get('category') as string,
+      date: quickAddPopover.date,
+      status: 'To Do'
+    };
+
+    const { data, error } = await supabase.from('tasks').insert([taskData]).select().single();
+    if (data) {
+      setTasks(prev => [...prev, data as Task]);
+      showToast('Tugas berhasil ditambahkan');
+      setQuickAddPopover({ isOpen: false, target: null, date: '' });
+    }
+  }
+
+  const handleEditEventSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    const formData = new FormData(e.currentTarget);
+    if (!editEventModal.event) return;
+
+    const updatedData = {
+      title: formData.get('title') as string,
+      category: formData.get('category') as string,
+      date: editEventModal.event.date,
+      status: formData.get('status') as string,
+    };
+
+    const { data, error } = await supabase.from('tasks').update(updatedData).eq('id', editEventModal.event.id).select().single();
+    if (data) {
+      setTasks(prev => prev.map(t => t.id === data.id ? (data as Task) : t));
+      setEditEventModal({ isOpen: false, event: null });
+      showToast('Event berhasil diubah');
+    }
+  };
+
+  const toggleTaskStatus = async (taskId: string, currentStatus: string) => {
+    const newStatus = currentStatus === 'Done' ? 'To Do' : 'Done';
+    setTasks(prev => prev.map(t => t.id === taskId ? { ...t, status: newStatus } : t));
+    await supabase.from('tasks').update({ status: newStatus }).eq('id', taskId);
+  }
+
+  const confirmDeleteTask = async () => {
+    const taskId = deleteTaskModal.taskId;
+    const { error } = await supabase.from('tasks').delete().eq('id', taskId);
+    if (!error) {
+      setTasks(prev => prev.filter(t => t.id !== taskId));
+      setDeleteTaskModal({ isOpen: false, taskId: '', taskTitle: '' })
+      showToast('Tugas berhasil dihapus')
+    }
+  }
+
+  const confirmDeleteFolder = async () => {
+    const { folderId, folderName } = deleteModal
+    const { error } = await supabase.from('folders').delete().eq('id', folderId); 
+    if (!error) {
+      setFolders(prev => prev.filter(f => f.id !== folderId))
+      setTasks(prev => prev.filter(t => t.category !== folderName))
+      setDeleteModal({ isOpen: false, folderId: '', folderName: '' })
+      showToast('Folder berhasil dihapus')
+    }
+  }
+
+  const confirmDeleteNote = async () => {
+    const { folderId, noteId } = deleteNoteModal
+    const { error } = await supabase.from('notes').delete().eq('id', noteId);
+    if (!error) {
+      setFolders(prev => prev.map(f => {
+        if (f.id === folderId) {
+          return { ...f, notes: f.notes.filter(n => n.id !== noteId) }
+        }
+        return f
+      }))
+      if (activeNote?.id === noteId) {
+        setActiveNote(null)
+        setActiveView('dashboard')
+      }
+      setDeleteNoteModal({ isOpen: false, folderId: '', noteId: '', noteTitle: '' })
+      showToast('Catatan berhasil dihapus')
+    }
+  }
+
+  const handleRenameFolder = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault()
+    const formData = new FormData(e.currentTarget)
+    const newName = formData.get('newName') as string
+    const newColor = formData.get('folderColor') as string
+    const { folderId, currentName: oldName, currentColor } = renameModal
+
+    if (!newName || (newName === oldName && newColor === currentColor)) {
+      setRenameModal({ isOpen: false, folderId: '', currentName: '', currentColor: '' })
+      return
+    }
+
+    const { error } = await supabase.from('folders').update({ name: newName, color: newColor }).eq('id', folderId);
+    if (!error) {
+      if (newName !== oldName) {
+         await supabase.from('tasks').update({ category: newName }).eq('category', oldName);
+      }
+      setFolders(prev => prev.map(f => (f.id === folderId ? { ...f, name: newName, color: newColor } : f)))
+      setTasks(prev => prev.map(t => (t.category === oldName ? { ...t, category: newName } : t)))
+      setRenameModal({ isOpen: false, folderId: '', currentName: '', currentColor: '' })
+      showToast('Folder berhasil diubah')
+    }
+  }
+
+  const handleRenameNoteSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault()
+    const formData = new FormData(e.currentTarget)
+    const newTitle = formData.get('newNoteTitle') as string
+    const { folderId, noteId } = renameNoteModal
+
+    if (newTitle) {
+      const { error } = await supabase.from('notes').update({ title: newTitle }).eq('id', noteId);
+      if (!error) {
+        setFolders(prev => prev.map(f => {
+          if (f.id === folderId) {
+            return { ...f, notes: f.notes.map(n => n.id === noteId ? { ...n, title: newTitle } : n) }
+          }
+          return f
+        }))
+        if (activeNote?.id === noteId) setActiveNote(prev => prev ? { ...prev, title: newTitle } : null)
+        setRenameNoteModal({ isOpen: false, folderId: '', noteId: '', currentTitle: '' })
+        showToast('Nama catatan berhasil diubah')
+      }
+    }
+  }
+
+  const toggleFolderInSidebar = async (folderId: string) => {
+    const folder = folders.find(f => f.id === folderId);
+    if (folder) {
+      setFolders(prev => prev.map(f => (f.id === folderId ? { ...f, isOpen: !f.isOpen } : f)))
+      await supabase.from('folders').update({ is_open: !folder.isOpen }).eq('id', folderId);
+    }
+  }
+
+  const onDragEnd = async (result: DropResult) => {
+    const { source, destination, draggableId } = result;
+
+    if (!destination) return;
+    if (destination.droppableId === source.droppableId && destination.index === source.index) return;
+
+    const taskToMove = tasks.find(t => t.id === draggableId);
+    if (!taskToMove) return;
+
+    const destFolder = folders.find(f => f.id === destination.droppableId);
+    const destCategory = destFolder ? destFolder.name : taskToMove.category;
+
+    const newTasks = tasks.filter(t => t.id !== draggableId);
+    const destinationTasks = newTasks.filter(t => t.category === destCategory);
+
+    let insertionIndex;
+    if (destination.index === 0) {
+      const firstTaskOfCategory = newTasks.find(t => t.category === destCategory);
+      insertionIndex = firstTaskOfCategory ? newTasks.indexOf(firstTaskOfCategory) : newTasks.length;
+    } else {
+      const taskBefore = destinationTasks[destination.index - 1];
+      insertionIndex = newTasks.indexOf(taskBefore) + 1;
+    }
+
+    newTasks.splice(insertionIndex, 0, { ...taskToMove, category: destCategory });
+    setTasks(newTasks);
+
+    if (taskToMove.category !== destCategory) {
+      await supabase.from('tasks').update({ category: destCategory }).eq('id', taskToMove.id);
+    }
+  };
+
+  const onNoteTitleChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const newTitle = e.target.value
+    if (activeNote) {
+      setActiveNote({ ...activeNote, title: newTitle })
+      setFolders(prev => prev.map(f => ({ ...f, notes: f.notes.map(n => n.id === activeNote.id ? { ...n, title: newTitle } : n) })))
+      await supabase.from('notes').update({ title: newTitle }).eq('id', activeNote.id);
+    }
+  }
+
+
+  // === SISA FUNGSI UI BIASA ===
+
   const openEventPopover = (e: React.MouseEvent, date: string) => {
     setEventPopover({ isOpen: true, target: e.currentTarget as HTMLElement, date });
   };
@@ -157,7 +469,6 @@ function App() {
 
   const openTaskModal = (category: string = '', date?: string) => {
     const validCategory = category || (folders[0]?.name || '');
-    // Jika date kosong, otomatis gunakan tanggal hari ini
     const validDate = date || new Date().toISOString().split('T')[0];
     setTaskModal({ isOpen: true, defaultCategory: validCategory, defaultDate: validDate });
   }
@@ -176,200 +487,28 @@ function App() {
     setNoteContextMenu({ x: e.clientX, y: e.clientY, noteId, folderId })
   }
 
-  const createNewFolder = () => {
-    setInputModal({ isOpen: true, mode: 'create_folder' })
-  }
+  const createNewFolder = () => setInputModal({ isOpen: true, mode: 'create_folder' })
+  const handleAddNote = (folderId: string) => { setInputModal({ isOpen: true, mode: 'create_note', folderId }); setContextMenu(null) }
+  const handleAddCanvas = (folderId: string) => { setInputModal({ isOpen: true, mode: 'create_canvas', folderId }); setContextMenu(null) }
 
   const openDeleteModal = (folderId: string) => {
     const folder = folders.find(f => f.id === folderId)
-    if (folder) {
-      setDeleteModal({ isOpen: true, folderId, folderName: folder.name })
-    }
-  }
-
-  const confirmDeleteFolder = () => {
-    const { folderId, folderName } = deleteModal
-    setFolders(prev => prev.filter(f => f.id !== folderId))
-    setTasks(prev => prev.filter(t => t.category !== folderName))
-    setDeleteModal({ isOpen: false, folderId: '', folderName: '' })
-    showToast('Folder deleted successfully')
-  }
-
-  const confirmDeleteNote = () => {
-    const { folderId, noteId } = deleteNoteModal
-    setFolders(prev => prev.map(f => {
-      if (f.id === folderId) {
-        return { ...f, notes: f.notes.filter(n => n.id !== noteId) }
-      }
-      return f
-    }))
-    if (activeNote?.id === noteId) {
-      setActiveNote(null)
-      setActiveView('dashboard')
-    }
-    setDeleteNoteModal({ isOpen: false, folderId: '', noteId: '', noteTitle: '' })
-    showToast('Note deleted successfully')
-  }
-
-  const handleAddNote = (folderId: string) => {
-    setInputModal({ isOpen: true, mode: 'create_note', folderId })
-    setContextMenu(null)
-  }
-
-  const handleAddCanvas = (folderId: string) => {
-    setInputModal({ isOpen: true, mode: 'create_canvas', folderId })
-    setContextMenu(null)
+    if (folder) setDeleteModal({ isOpen: true, folderId, folderName: folder.name })
   }
 
   const openRenameModal = (folderId: string) => {
     const folder = folders.find(f => f.id === folderId)
-    if (folder) {
-      setRenameModal({ isOpen: true, folderId, currentName: folder.name, currentColor: folder.color })
-    }
-  }
-
-  const handleRenameFolder = (e: React.FormEvent<HTMLFormElement>) => {
-    e.preventDefault()
-    const formData = new FormData(e.currentTarget)
-    const newName = formData.get('newName') as string
-    const newColor = formData.get('folderColor') as string
-    const { folderId, currentName: oldName, currentColor } = renameModal
-
-    if (!newName || (newName === oldName && newColor === currentColor)) {
-      setRenameModal({ isOpen: false, folderId: '', currentName: '', currentColor: '' })
-      return
-    }
-
-    setFolders(prev => prev.map(f => (f.id === folderId ? { ...f, name: newName, color: newColor } : f)))
-    setTasks(prev => prev.map(t => (t.category === oldName ? { ...t, category: newName } : t)))
-
-    setRenameModal({ isOpen: false, folderId: '', currentName: '', currentColor: '' })
-    showToast('Folder updated successfully')
-  }
-
-  const handleRenameNoteSubmit = (e: React.FormEvent<HTMLFormElement>) => {
-    e.preventDefault()
-    const formData = new FormData(e.currentTarget)
-    const newTitle = formData.get('newNoteTitle') as string
-    const { folderId, noteId } = renameNoteModal
-
-    if (newTitle) {
-      setFolders(prev => prev.map(f => {
-        if (f.id === folderId) {
-          return { ...f, notes: f.notes.map(n => n.id === noteId ? { ...n, title: newTitle } : n) }
-        }
-        return f
-      }))
-      if (activeNote?.id === noteId) setActiveNote(prev => prev ? { ...prev, title: newTitle } : null)
-    }
-    setRenameNoteModal({ isOpen: false, folderId: '', noteId: '', currentTitle: '' })
-    showToast('Note name updated successfully')
-  }
-
-  const toggleFolderInSidebar = (folderId: string) => {
-    setFolders(prev => prev.map(f => (f.id === folderId ? { ...f, isOpen: !f.isOpen } : f)))
+    if (folder) setRenameModal({ isOpen: true, folderId, currentName: folder.name, currentColor: folder.color })
   }
 
   const toggleCategoryOnDashboard = (folderId: string) => {
     setOpenCategories(prev => ({ ...prev, [folderId]: !(prev[folderId] ?? true) }))
   }
 
-  const handleTaskSubmit = (e: React.FormEvent<HTMLFormElement>) => {
-    e.preventDefault()
-    const formData = new FormData(e.currentTarget)
-    const newTask: Task = {
-      id: Date.now().toString(),
-      title: formData.get('title') as string,
-      category: formData.get('category') as string,
-      date: taskModal.defaultDate,
-      status: 'To Do'
-    }
-    setTasks([...tasks, newTask])
-    setTaskModal({ ...taskModal, isOpen: false })
-    showToast('Task added successfully')
-  }
-
-  const toggleTaskStatus = (taskId: string) => {
-    setTasks(prev => prev.map(t => t.id === taskId ? { ...t, status: t.status === 'Done' ? 'To Do' : 'Done' } : t))
-  }
-
   const deleteTask = (taskId: string) => {
     const task = tasks.find(t => t.id === taskId)
     if (task) setDeleteTaskModal({ isOpen: true, taskId, taskTitle: task.title })
   }
-
-  const confirmDeleteTask = () => {
-    setTasks(prev => prev.filter(t => t.id !== deleteTaskModal.taskId))
-    setDeleteTaskModal({ isOpen: false, taskId: '', taskTitle: '' })
-    showToast('Task deleted successfully')
-  }
-
-  const onDragEnd = (result: DropResult) => {
-    const { source, destination, draggableId } = result;
-
-    if (!destination) return;
-    if (destination.droppableId === source.droppableId && destination.index === source.index) return;
-
-    const taskToMove = tasks.find(t => t.id === draggableId);
-    if (!taskToMove) return;
-
-    const destFolder = folders.find(f => f.id === destination.droppableId);
-    const destCategory = destFolder ? destFolder.name : taskToMove.category;
-
-    const newTasks = tasks.filter(t => t.id !== draggableId);
-    const destinationTasks = newTasks.filter(t => t.category === destCategory);
-
-    let insertionIndex;
-
-    if (destination.index === 0) {
-      const firstTaskOfCategory = newTasks.find(t => t.category === destCategory);
-      insertionIndex = firstTaskOfCategory ? newTasks.indexOf(firstTaskOfCategory) : newTasks.length;
-    } else {
-      const taskBefore = destinationTasks[destination.index - 1];
-      insertionIndex = newTasks.indexOf(taskBefore) + 1;
-    }
-
-    newTasks.splice(insertionIndex, 0, { ...taskToMove, category: destCategory });
-    setTasks(newTasks);
-  };
-
-  const handleQuickAddSubmit = (e: React.FormEvent<HTMLFormElement>) => {
-    e.preventDefault();
-    const formData = new FormData(e.currentTarget);
-    const title = formData.get('title') as string;
-    if (!title) {
-      showToast('Task title cannot be empty', 'error');
-      return;
-    }
-
-    const newTask: Task = {
-      id: Date.now().toString(),
-      title,
-      category: formData.get('category') as string,
-      date: quickAddPopover.date,
-      status: 'To Do'
-    };
-
-    setTasks(prev => [...prev, newTask]);
-    showToast('Task added successfully');
-    setQuickAddPopover({ isOpen: false, target: null, date: '' });
-  }
-
-  const handleEditEventSubmit = (e: React.FormEvent<HTMLFormElement>) => {
-    e.preventDefault();
-    const formData = new FormData(e.currentTarget);
-    if (!editEventModal.event) return;
-
-    const updatedTask: Task = {
-      ...editEventModal.event,
-      title: formData.get('title') as string,
-      category: formData.get('category') as string,
-      status: formData.get('status') as string,
-    };
-    setTasks(prev => prev.map(t => t.id === updatedTask.id ? updatedTask : t));
-    setEditEventModal({ isOpen: false, event: null });
-    showToast('Event updated successfully');
-  };
 
   const calculatePopoverPosition = (target: HTMLElement | null) => {
     if (!target) return {};
@@ -381,55 +520,14 @@ function App() {
     let left = rect.left;
     const margin = 2;
 
-    // Cek apakah cukup ruang di bawah
     if (rect.bottom + margin + popoverHeight <= window.innerHeight) {
-      // Tampilkan di bawah
       top = rect.bottom + margin;
     } else {
-      // Tampilkan di atas, rapat ke bawah elemen
       top = rect.top - popoverHeight - margin;
     }
 
-    // Jika popover keluar layar kanan, geser ke kiri
     if (left + popoverWidth > window.innerWidth) left = window.innerWidth - popoverWidth - 12;
-
-    // Pastikan tidak keluar layar kiri/atas
     return { top: Math.max(top, 8), left: Math.max(left, 8) };
-  }
-
-  const handleInputSubmit = (e: React.FormEvent<HTMLFormElement>) => {
-    e.preventDefault()
-    const formData = new FormData(e.currentTarget)
-    // 2. PERBAIKAN TYPO "strings" MENJADI "string"
-    const value = formData.get('inputValue') as string
-    const color = formData.get('inputColor') as string || '#6366f1';
-    if (!value) return
-
-    if (inputModal.mode === 'create_folder') {
-      setFolders(prev => [...prev, { id: Date.now().toString(), name: value, isOpen: true, notes: [], color }])
-      showToast('Folder created successfully')
-    } else if (inputModal.mode === 'create_note' && inputModal.folderId) {
-      const newNote: Note = { id: Date.now().toString(), title: value, type: 'note' }
-      setFolders(prev => prev.map(f => f.id === inputModal.folderId ? { ...f, notes: [...f.notes, newNote], isOpen: true } : f))
-      setActiveNote(newNote)
-      setActiveView('note')
-      showToast('Note created successfully')
-    } else if (inputModal.mode === 'create_canvas' && inputModal.folderId) {
-      const newNote: Note = { id: Date.now().toString(), title: value, type: 'canvas' }
-      setFolders(prev => prev.map(f => f.id === inputModal.folderId ? { ...f, notes: [...f.notes, newNote], isOpen: true } : f))
-      setActiveNote(newNote)
-      setActiveView('note')
-      showToast('Canvas created successfully')
-    }
-    setInputModal({ ...inputModal, isOpen: false })
-  }
-
-  const onNoteTitleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const newTitle = e.target.value
-    if (activeNote) {
-      setActiveNote({ ...activeNote, title: newTitle })
-      setFolders(prev => prev.map(f => ({ ...f, notes: f.notes.map(n => n.id === activeNote.id ? { ...n, title: newTitle } : n) })))
-    }
   }
 
   const today = new Date()
@@ -441,16 +539,16 @@ function App() {
 
   const goToPrevYear = () => setCalendarYear(prev => prev - 1);
   const goToNextYear = () => setCalendarYear(prev => prev + 1);
-  const handleMonthChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    setCalendarMonth(Number(e.target.value));
-  };
+  const handleMonthChange = (e: React.ChangeEvent<HTMLSelectElement>) => setCalendarMonth(Number(e.target.value));
 
   const activeFolder = activeNote ? folders.find(f => f.notes.some(n => n.id === activeNote.id)) : null
 
   const getCoverGradient = (id: string) => {
     const gradients = ['linear-gradient(120deg, #84fab0 0%, #8fd3f4 100%)', 'linear-gradient(120deg, #fccb90 0%, #d57eeb 100%)', 'linear-gradient(120deg, #e0c3fc 0%, #8ec5fc 100%)', 'linear-gradient(120deg, #f093fb 0%, #f5576c 100%)']
-    const index = parseInt(id.replace(/\D/g, '') || '0') % gradients.length
-    return gradients[index]
+    // Safe extraction of numbers, falling back to 0 if none
+    const numMatch = id.match(/\d+/g);
+    const index = numMatch ? parseInt(numMatch.join('')) % gradients.length : 0;
+    return gradients[index];
   }
 
   return (
@@ -512,15 +610,12 @@ function App() {
             <div className="timer-fullscreen-hint">Klik untuk fullscreen</div>
           </div>
 
-          {/* Fullscreen timer dipindah ke bawah agar overlay benar-benar full page */}
-
         <div className="theme-wrapper">
           <span className="theme-label">Dark Mode</span>
           <button className={`toggle-switch ${isDarkMode ? 'active' : ''}`} onClick={toggleTheme}><div className="toggle-handle">{isDarkMode ? <PiMoon size={12} color="#333" style={{ marginTop: '3px', marginLeft: '3px' }} /> : <PiSun size={12} color="#F59E0B" style={{ marginTop: '3px', marginLeft: '3px' }} />}</div></button>
         </div>
       </aside>
 
-      {/* Render fullscreen timer overlay di luar sidebar dan sebelum main */}
       {showFullscreenTimer && (
         <div className="fullscreen-timer-overlay" onClick={() => setShowFullscreenTimer(false)}>
           <div className="fullscreen-timer-card" onClick={e => e.stopPropagation()}>
@@ -535,15 +630,8 @@ function App() {
                 bgColor={isDark ? '#444' : '#23243a33'}
               >
                 <div style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  width: '100%',
-                  height: '100%',
-                  fontSize: 64,
-                  fontWeight: 800,
-                  color: 'var(--accent, #f59e0b)',
-                  textShadow: '0 0 40px var(--accent-glow, #fbbf24)'
+                  display: 'flex', alignItems: 'center', justifyContent: 'center', width: '100%', height: '100%', fontSize: 64, fontWeight: 800,
+                  color: 'var(--accent, #f59e0b)', textShadow: '0 0 40px var(--accent-glow, #fbbf24)'
                 }}>
                   {formatTime(timeLeft)}
                 </div>
@@ -558,7 +646,6 @@ function App() {
         </div>
       )}
 
-      {/* Modal pengaturan timer */}
       {showTimerSetting && (
         <div className="fullscreen-timer-overlay" onClick={() => setShowTimerSetting(false)}>
           <div className="fullscreen-timer-card" onClick={e => e.stopPropagation()} style={{ minWidth: 320, minHeight: 0, padding: '2.5rem 2rem' }}>
@@ -600,7 +687,6 @@ function App() {
               <h1>Tasks & Deadlines</h1>
             </div>
 
-            {/* Daily/Weekly Goals Section */}
             <div className="goals-section">
               <div className="goals-header">
                 <span className={goalMode === 'daily' ? 'goals-mode active' : 'goals-mode'} onClick={() => setGoalMode('daily')}>Daily</span>
@@ -611,20 +697,14 @@ function App() {
               <div className="goals-progress-bar-bg">
                 <div className="goals-progress-bar" style={{ width: progress + '%' }} />
               </div>
-              <form className="goals-add-form" onSubmit={e => {
-                e.preventDefault();
-                if (goalInput.trim()) {
-                  setGoals([...goals, { text: goalInput.trim(), done: false, mode: goalMode }]);
-                  setGoalInput('');
-                }
-              }}>
+              <form className="goals-add-form" onSubmit={handleAddGoal}>
                 <input className="goals-input" placeholder={goalMode === 'daily' ? 'Add daily goal...' : 'Add weekly goal...'} value={goalInput} onChange={e => setGoalInput(e.target.value)} />
                 <button className="goals-add-btn" type="submit">Add</button>
               </form>
               <ul className="goals-list">
                 {filteredGoals.length === 0 && <li className="goals-empty">No goals yet.</li>}
-                {filteredGoals.map((g, i) => (
-                  <li key={i} className={g.done ? 'goals-item done' : 'goals-item'} onClick={() => setGoals(goals => goals.map((goal, idx) => idx === goals.findIndex((gg, ii) => ii === i && gg.mode === goalMode) ? { ...goal, done: !goal.done } : goal))}>
+                {filteredGoals.map((g) => (
+                  <li key={g.id} className={g.done ? 'goals-item done' : 'goals-item'} onClick={() => toggleGoalDone(g.id, g.done)}>
                     <span className="goals-check">{g.done ? '✔' : ''}</span>
                     <span className="goals-text">{g.text}</span>
                   </li>
@@ -667,7 +747,7 @@ function App() {
                                         className={`task-row ${task.status === 'Done' ? 'completed' : ''} ${snapshot.isDragging ? 'dragging' : ''}`}
                                       >
                                         <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flex: 1 }}>
-                                          <input type="checkbox" className="custom-checkbox" checked={task.status === 'Done'} onChange={() => toggleTaskStatus(task.id)} />
+                                          <input type="checkbox" className="custom-checkbox" checked={task.status === 'Done'} onChange={() => toggleTaskStatus(task.id, task.status)} />
                                           <span className="task-title" title={task.title}>{task.title}</span>
                                         </div>
                                         <span className="task-date" style={{ marginRight: '1rem' }}>{new Date(task.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</span>
@@ -714,14 +794,13 @@ function App() {
                     const dayTasks = tasks.filter(t => t.date === dateStr)
                     const isToday = day === today.getDate() && calendarMonth === today.getMonth() && calendarYear === today.getFullYear();
 
-                    const onDropEvent = (e: React.DragEvent<HTMLDivElement>) => {
+                    const onDropEvent = async (e: React.DragEvent<HTMLDivElement>) => {
                       e.preventDefault();
                       const taskId = e.dataTransfer.getData('text/event-id');
                       setTasks(prev => prev.map(t => t.id === taskId ? { ...t, date: dateStr } : t));
+                      await supabase.from('tasks').update({ date: dateStr }).eq('id', taskId);
                     };
-                    const onDragOver = (e: React.DragEvent<HTMLDivElement>) => {
-                      e.preventDefault();
-                    };
+                    const onDragOver = (e: React.DragEvent<HTMLDivElement>) => e.preventDefault();
 
                     const isImportant = dayTasks.some(t => /urgent|penting/i.test(t.title));
                     return (
@@ -759,7 +838,6 @@ function App() {
                     )
                   })}
 
-                  {/* EVENT POPOVER (Dibungkus dengan rapi di sini) */}
                   {eventPopover.isOpen && (
                     <div className="modal-overlay transparent" onClick={closeEventPopover}>
                       <div className="event-popover" style={calculatePopoverPosition(eventPopover.target)} onClick={e => e.stopPropagation()}>
@@ -820,14 +898,19 @@ function App() {
               </div>
 
               <div className="editor-wrapper">
-                {activeNote?.type === 'canvas' ? (<div className="canvas-placeholder"><PiSquaresFour size={48} /><h3>Canvas Mode</h3><p>Draw diagrams and create visuals here.</p></div>) : (<BlockNoteView editor={editor} theme={isDarkMode ? 'dark' : 'light'} />)}
+                {activeNote?.type === 'canvas' ? (
+                  <div className="canvas-placeholder"><PiSquaresFour size={48} /><h3>Canvas Mode</h3><p>Draw diagrams and create visuals here.</p></div>
+                ) : (
+                  /* 3. Gunakan Komponen Editor Pintar yang Bisa Load/Save Content */
+                  <EditorWrapper key={activeNote?.id} note={activeNote!} isDarkMode={isDarkMode} />
+                )}
               </div>
             </article>
           </div>
         )}
       </main>
 
-      {/* --- ALL MODALS ARE PLACED HERE NEATLY --- */}
+      {/* --- ALL MODALS --- */}
       {quickAddPopover.isOpen && (
         <div className="modal-overlay transparent" onClick={() => setQuickAddPopover({ isOpen: false, target: null, date: '' })}>
           <div className="quick-add-popover" style={calculatePopoverPosition(quickAddPopover.target)} onClick={e => e.stopPropagation()}>
