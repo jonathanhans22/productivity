@@ -128,7 +128,7 @@ function App() {
   const progress = filteredGoals.length === 0 ? 0 : Math.round(filteredGoals.filter(g => g.done).length / filteredGoals.length * 100);
 
   const [activeView, setActiveView] = useState<'dashboard' | 'note'>('dashboard')
-  const [dashboardTab, setDashboardTab] = useState<'category' | 'calendar'>('category')
+  const [dashboardTab, setDashboardTab] = useState<'category' | 'calendar' | 'status'>('category')
   const [openCategories, setOpenCategories] = useState<Record<string, boolean>>({})
 
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; folderId: string } | null>(null)
@@ -315,7 +315,8 @@ function App() {
   };
 
   const toggleTaskStatus = async (taskId: string, currentStatus: string) => {
-    const newStatus = currentStatus === 'Done' ? 'To Do' : 'Done';
+    const cycle: Record<string, string> = { 'To Do': 'In Progress', 'In Progress': 'Done', 'Done': 'To Do' };
+    const newStatus = cycle[currentStatus] ?? 'To Do';
     setTasks(prev => prev.map(t => t.id === taskId ? { ...t, status: newStatus } : t));
     await supabase.from('tasks').update({ status: newStatus }).eq('id', taskId);
   }
@@ -715,6 +716,7 @@ function App() {
             <div className="view-tabs">
               <button className={`view-tab ${dashboardTab === 'category' ? 'active' : ''}`} onClick={() => setDashboardTab('category')}><PiStack style={{ verticalAlign: 'text-bottom' }} /> By Category</button>
               <button className={`view-tab ${dashboardTab === 'calendar' ? 'active' : ''}`} onClick={() => setDashboardTab('calendar')}><PiCalendar style={{ verticalAlign: 'text-bottom' }} /> Calendar</button>
+              <button className={`view-tab ${dashboardTab === 'status' ? 'active' : ''}`} onClick={() => setDashboardTab('status')}><PiCheckCircle style={{ verticalAlign: 'text-bottom' }} /> By Status</button>
             </div>
 
             {dashboardTab === 'category' && (
@@ -746,11 +748,9 @@ function App() {
                                         {...provided.dragHandleProps}
                                         className={`task-row ${task.status === 'Done' ? 'completed' : ''} ${snapshot.isDragging ? 'dragging' : ''}`}
                                       >
-                                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flex: 1 }}>
-                                          <input type="checkbox" className="custom-checkbox" checked={task.status === 'Done'} onChange={() => toggleTaskStatus(task.id, task.status)} />
-                                          <span className="task-title" title={task.title}>{task.title}</span>
-                                        </div>
-                                        <span className="task-date" style={{ marginRight: '1rem' }}>{new Date(task.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</span>
+                                        <input type="checkbox" className="custom-checkbox" checked={task.status === 'Done'} onChange={() => toggleTaskStatus(task.id, task.status)} />
+                                        <span className="task-title" title={task.title}>{task.title}</span>
+                                        <span className="task-date">{new Date(task.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</span>
                                         <button onClick={() => deleteTask(task.id)} className="btn-icon-danger"><PiTrash /></button>
                                       </div>
                                     )}
@@ -814,67 +814,250 @@ function App() {
                       >
                         <div className="day-header">
                           <span className="day-num">{day}</span>
-                          {dayTasks.length > 0 && (
-                            <span className="event-count-badge">{dayTasks.length}</span>
-                          )}
                         </div>
-                        {dayTasks.slice(0, 4).map((t: Task) => {
-                          const folderColor = folders.find(f => f.name === t.category)?.color || '#6366f1';
+                        {dayTasks.length > 0 && (() => {
+                          // Show up to 2 short text pills, rest as dots
+                          const SHOW_PILLS = 2;
+                          const shownPills = dayTasks.slice(0, SHOW_PILLS);
+                          const restDots = dayTasks.slice(SHOW_PILLS);
                           return (
-                            <div
-                              key={t.id}
-                              className="event-badge"
-                              draggable
-                              onDragStart={e => e.dataTransfer.setData('text/event-id', t.id)}
-                              style={{ background: folderColor, color: '#fff' }}
-                              title={t.title}
-                            >
-                              {t.title}
+                            <div className="cal-events-wrap">
+                              {shownPills.map((t: Task) => {
+                                const folderColor = folders.find(f => f.name === t.category)?.color || '#6366f1';
+                                const statusIcon = t.status === 'Done' ? '✓' : t.status === 'In Progress' ? '◑' : '';
+                                return (
+                                  <div
+                                    key={t.id}
+                                    className={`cal-event-pill ${t.status === 'Done' ? 'pill-done' : ''}`}
+                                    draggable
+                                    onDragStart={e => e.dataTransfer.setData('text/event-id', t.id)}
+                                    style={{ background: folderColor }}
+                                    title={`${t.title} [${t.status}]`}
+                                  >
+                                    {statusIcon && <span className="pill-status-icon">{statusIcon}</span>}
+                                    <span className="pill-text">{t.title}</span>
+                                  </div>
+                                );
+                              })}
+                              {restDots.length > 0 && (
+                                <div className="cal-dots-row" title={restDots.map(t => `${t.title} [${t.status}]`).join('\n')}>
+                                  {restDots.map((t: Task) => {
+                                    const folderColor = folders.find(f => f.name === t.category)?.color || '#6366f1';
+                                    const borderColor = t.status === 'Done' ? '#22c55e' : t.status === 'In Progress' ? '#f59e0b' : 'transparent';
+                                    return (
+                                      <span
+                                        key={t.id}
+                                        className="cal-dot"
+                                        draggable
+                                        onDragStart={e => e.dataTransfer.setData('text/event-id', t.id)}
+                                        style={{ background: folderColor, boxShadow: `0 0 0 2px ${borderColor}` }}
+                                        title={`${t.title} [${t.status}]`}
+                                      />
+                                    );
+                                  })}
+                                  <span className="cal-dots-more">+{restDots.length}</span>
+                                </div>
+                              )}
                             </div>
                           );
-                        })}
-                        {dayTasks.length > 4 && <div className="event-badge more-badge">+{dayTasks.length - 4} more</div>}
+                        })()}
                       </div>
                     )
                   })}
 
-                  {eventPopover.isOpen && (
-                    <div className="modal-overlay transparent" onClick={closeEventPopover}>
-                      <div className="event-popover" style={calculatePopoverPosition(eventPopover.target)} onClick={e => e.stopPropagation()}>
-                        <h4 className="quick-add-title">Tasks on {new Date(eventPopover.date).toLocaleDateString('en-US', { day: 'numeric', month: 'long', year: 'numeric' })}</h4>
-                        <div style={{ marginBottom: 8 }}>
-                          {tasks.filter(t => t.date === eventPopover.date).length === 0 && <div style={{ color: '#888', fontSize: 14 }}>No tasks</div>}
-                          {tasks.filter(t => t.date === eventPopover.date).map(task => (
-                            <div key={task.id} className="event-card">
-                              <div className="event-card-header">
-                                <span className="event-card-title" title={task.title}>{task.title}</span>
-                                <button className="event-card-edit" title="Edit" onClick={() => { setEditEventModal({ isOpen: true, event: task }); closeEventPopover(); }}>
-                                  <PiPencilSimple style={{ marginRight: 6 }} /> Edit
-                                </button>
-                                <button className="event-card-open" title="Open" onClick={() => { setOpenEventDetail({ isOpen: true, event: task }); closeEventPopover(); }}>
-                                  <PiNotePencil style={{ marginRight: 6 }} /> Details
-                                </button>
-                                <button className="event-card-delete" title="Delete" onClick={() => { setDeleteTaskModal({ isOpen: true, taskId: task.id, taskTitle: task.title }); closeEventPopover(); }}>
-                                  <PiTrash style={{ marginRight: 6 }} /> Delete
-                                </button>
+                  {eventPopover.isOpen && (() => {
+                    const dateTasks = tasks.filter(t => t.date === eventPopover.date);
+                    const dateLabel = new Date(eventPopover.date + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+                    const todayStr = new Date().toISOString().split('T')[0];
+                    const isToday = eventPopover.date === todayStr;
+                    return (
+                      <>
+                        {/* Backdrop */}
+                        <div className="day-panel-backdrop" onClick={closeEventPopover} />
+                        {/* Side panel */}
+                        <div className="day-panel">
+                          {/* Header */}
+                          <div className="day-panel-header">
+                            <div className="day-panel-header-left">
+                              <div className="day-panel-date-num">
+                                {new Date(eventPopover.date + 'T00:00:00').getDate()}
                               </div>
-                              <div className="event-card-meta">
-                                <span className="event-card-category">Category: {task.category}</span>
-                                <span className="event-card-status">Status: {task.status}</span>
+                              <div className="day-panel-date-info">
+                                <span className="day-panel-month">
+                                  {new Date(eventPopover.date + 'T00:00:00').toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
+                                </span>
+                                <span className="day-panel-weekday">
+                                  {new Date(eventPopover.date + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'long' })}
+                                  {isToday && <span className="day-panel-today-badge">Today</span>}
+                                </span>
                               </div>
                             </div>
-                          ))}
+                            <button className="day-panel-close" onClick={closeEventPopover}><PiX size={20} /></button>
+                          </div>
+
+                          {/* Summary bar */}
+                          <div className="day-panel-summary">
+                            <span className="day-panel-summary-item" style={{ '--sc': '#6366f1' } as React.CSSProperties}>
+                              <span className="dps-num">{dateTasks.filter(t => t.status === 'To Do').length}</span>
+                              <span className="dps-label">To Do</span>
+                            </span>
+                            <span className="day-panel-summary-item" style={{ '--sc': '#f59e0b' } as React.CSSProperties}>
+                              <span className="dps-num">{dateTasks.filter(t => t.status === 'In Progress').length}</span>
+                              <span className="dps-label">In Progress</span>
+                            </span>
+                            <span className="day-panel-summary-item" style={{ '--sc': '#22c55e' } as React.CSSProperties}>
+                              <span className="dps-num">{dateTasks.filter(t => t.status === 'Done').length}</span>
+                              <span className="dps-label">Done</span>
+                            </span>
+                          </div>
+
+                          {/* Scrollable event list */}
+                          <div className="day-panel-body">
+                            {dateTasks.length === 0 ? (
+                              <div className="day-panel-empty">
+                                <span style={{ fontSize: '2.5rem' }}>📭</span>
+                                <span>No tasks for this day</span>
+                                <span style={{ fontSize: '0.8rem', opacity: 0.6 }}>Click below to add one!</span>
+                              </div>
+                            ) : (
+                              dateTasks.map(task => {
+                                const folderColor = folders.find(f => f.name === task.category)?.color || '#6366f1';
+                                const statusColor = task.status === 'Done' ? '#22c55e' : task.status === 'In Progress' ? '#f59e0b' : '#6366f1';
+                                const statusIcon = task.status === 'Done' ? '✓' : task.status === 'In Progress' ? '◑' : '○';
+                                return (
+                                  <div key={task.id} className="day-panel-event-card" style={{ '--fc': folderColor } as React.CSSProperties}>
+                                    {/* Left accent bar */}
+                                    <div className="dpec-bar" style={{ background: folderColor }} />
+                                    <div className="dpec-body">
+                                      {/* Top row: status badge + category */}
+                                      <div className="dpec-top">
+                                        <span className="dpec-status-badge" style={{ background: statusColor + '22', color: statusColor, borderColor: statusColor + '44' }}>
+                                          {statusIcon} {task.status}
+                                        </span>
+                                        <span className="dpec-category" style={{ background: folderColor + '22', color: folderColor }}>
+                                          {task.category}
+                                        </span>
+                                      </div>
+                                      {/* Title */}
+                                      <div className={`dpec-title ${task.status === 'Done' ? 'dpec-done' : ''}`}>
+                                        {task.title}
+                                      </div>
+                                      {/* Actions */}
+                                      <div className="dpec-actions">
+                                        <button className="dpec-btn dpec-btn-check"
+                                          onClick={() => toggleTaskStatus(task.id, task.status)}
+                                          title="Cycle status"
+                                          style={{ borderColor: statusColor + '66', color: statusColor }}>
+                                          {statusIcon} Cycle
+                                        </button>
+                                        <button className="dpec-btn dpec-btn-edit"
+                                          onClick={() => { setEditEventModal({ isOpen: true, event: task }); closeEventPopover(); }}>
+                                          <PiPencilSimple size={13} /> Edit
+                                        </button>
+                                        <button className="dpec-btn dpec-btn-detail"
+                                          onClick={() => { setOpenEventDetail({ isOpen: true, event: task }); closeEventPopover(); }}>
+                                          <PiNotePencil size={13} /> Notes
+                                        </button>
+                                        <button className="dpec-btn dpec-btn-del"
+                                          onClick={() => { setDeleteTaskModal({ isOpen: true, taskId: task.id, taskTitle: task.title }); closeEventPopover(); }}>
+                                          <PiTrash size={13} />
+                                        </button>
+                                      </div>
+                                    </div>
+                                  </div>
+                                );
+                              })
+                            )}
+                          </div>
+
+                          {/* Footer: Add button */}
+                          <div className="day-panel-footer">
+                            <button className="day-panel-add-btn"
+                              onClick={() => { openQuickAdd({ currentTarget: null } as any, eventPopover.date); closeEventPopover(); }}>
+                              <PiPlus size={16} /> Add Task to This Day
+                            </button>
+                          </div>
                         </div>
-                        <button className="btn-inline-add" onClick={() => { openQuickAdd({ currentTarget: eventPopover.target } as any, eventPopover.date); closeEventPopover(); }}>
-                          <PiPlus style={{ marginRight: 4 }} />Add Event
-                        </button>
-                      </div>
-                    </div>
-                  )}
+                      </>
+                    );
+                  })()}
 
                 </div>
               </div>
             )}
+
+            {dashboardTab === 'status' && (() => {
+              const statusColumns = [
+                { key: 'To Do', label: 'To Do', color: '#6366f1', bg: 'rgba(99,102,241,0.08)', icon: '○' },
+                { key: 'In Progress', label: 'In Progress', color: '#f59e0b', bg: 'rgba(245,158,11,0.08)', icon: '◑' },
+                { key: 'Done', label: 'Done', color: '#22c55e', bg: 'rgba(34,197,94,0.08)', icon: '●' },
+              ];
+              return (
+                <DragDropContext onDragEnd={async (result) => {
+                  const { source, destination, draggableId } = result;
+                  if (!destination) return;
+                  if (destination.droppableId === source.droppableId && destination.index === source.index) return;
+                  const newStatus = destination.droppableId;
+                  setTasks(prev => prev.map(t => t.id === draggableId ? { ...t, status: newStatus } : t));
+                  await supabase.from('tasks').update({ status: newStatus }).eq('id', draggableId);
+                }}>
+                  <div className="kanban-board">
+                    {statusColumns.map(col => {
+                      const colTasks = tasks.filter(t => t.status === col.key);
+                      return (
+                        <div key={col.key} className="kanban-column" style={{ '--kanban-color': col.color, '--kanban-bg': col.bg } as React.CSSProperties}>
+                          <div className="kanban-column-header">
+                            <span className="kanban-status-dot" style={{ color: col.color }}>{col.icon}</span>
+                            <span className="kanban-column-title">{col.label}</span>
+                            <span className="kanban-count">{colTasks.length}</span>
+                          </div>
+                          <StrictModeDroppable droppableId={col.key}>
+                            {(provided, snapshot) => (
+                              <div
+                                ref={provided.innerRef}
+                                {...provided.droppableProps}
+                                className={`kanban-cards ${snapshot.isDraggingOver ? 'drag-over' : ''}`}
+                              >
+                                {colTasks.map((task, idx) => {
+                                  const folderColor = folders.find(f => f.name === task.category)?.color || '#6366f1';
+                                  return (
+                                    <Draggable key={task.id} draggableId={task.id} index={idx}>
+                                      {(provided, snap) => (
+                                        <div
+                                          ref={provided.innerRef}
+                                          {...provided.draggableProps}
+                                          {...provided.dragHandleProps}
+                                          className={`kanban-card ${snap.isDragging ? 'dragging' : ''}`}
+                                        >
+                                          <div className="kanban-card-top">
+                                            <span className="kanban-card-category-dot" style={{ background: folderColor }} />
+                                            <span className="kanban-card-category">{task.category}</span>
+                                            <button className="btn-icon-danger" style={{ marginLeft: 'auto', padding: '2px 4px' }} onClick={() => deleteTask(task.id)}><PiTrash size={14} /></button>
+                                          </div>
+                                          <div className="kanban-card-title">{task.title}</div>
+                                          <div className="kanban-card-footer">
+                                            <span className="kanban-card-date"><PiCalendar size={12} style={{ marginRight: 4 }} />{new Date(task.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</span>
+                                            <button className="kanban-card-edit-btn" onClick={() => setEditEventModal({ isOpen: true, event: task })}><PiPencilSimple size={12} /></button>
+                                          </div>
+                                        </div>
+                                      )}
+                                    </Draggable>
+                                  );
+                                })}
+                                {provided.placeholder}
+                                <button className="kanban-add-btn" onClick={() => openTaskModal('', '')}>
+                                  <PiPlus size={14} style={{ marginRight: 4 }} /> Add Task
+                                </button>
+                              </div>
+                            )}
+                          </StrictModeDroppable>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </DragDropContext>
+              );
+            })()}
           </div>
         ) : (
           <div className="document-container">
@@ -967,6 +1150,7 @@ function App() {
                 <label>Status</label>
                 <select name="status" className="form-control" defaultValue={editEventModal.event.status}>
                   <option value="To Do">To Do</option>
+                  <option value="In Progress">In Progress</option>
                   <option value="Done">Done</option>
                 </select>
               </div>
