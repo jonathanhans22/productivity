@@ -1,47 +1,42 @@
 import { useState, useEffect, forwardRef } from 'react'
-import { CircleProgress } from './components/CircleProgress'
 import DatePicker from 'react-datepicker'
 import 'react-datepicker/dist/react-datepicker.css'
 import { useCreateBlockNote } from '@blocknote/react'
 import { BlockNoteView } from '@blocknote/mantine'
 import { DragDropContext, Droppable, Draggable, type DropResult, type DroppableProps } from '@hello-pangea/dnd'
 import { PiTelevision, PiFolder, PiNotePencil, PiStack, PiCalendar, PiTimer, PiMoon, PiSun, PiPlus, PiList, PiPencilSimple, PiTrash, PiCaretDown, PiFilePlus, PiSquaresFour, PiImage, PiSmiley, PiTag, PiCheckCircle, PiWarningCircle, PiX } from 'react-icons/pi'
+import { GlobalSearch } from './components/GlobalSearch'
 import '@blocknote/core/fonts/inter.css'
 import '@blocknote/mantine/style.css'
 import './App.css'
 import { supabase } from './lib/supabase'
 
-// 1. Tipe Data Diperbarui dengan 'content'
 type Note = { id: string; title: string; type: 'note' | 'canvas'; content?: any }
 type Folder = { id: string; name: string; isOpen: boolean; notes: Note[]; color: string }
 type Task = { id: string; title: string; date: string; category: string; status: string }
+type SearchResult = { id: string; title: string; type: 'task' | 'note'; folderId?: string; }
 
-// 2. Komponen Khusus untuk Editor agar Auto-Save ke Supabase
 function EditorWrapper({ note, isDarkMode }: { note: Note, isDarkMode: boolean }) {
-  // Parse konten dari Supabase ke JSON yang dipahami BlockNote
-  const initialContent = note.content && typeof note.content === 'string' 
-    ? JSON.parse(note.content) 
+  const initialContent = note.content && typeof note.content === 'string'
+    ? JSON.parse(note.content)
     : (typeof note.content === 'object' ? note.content : undefined);
 
   const editor = useCreateBlockNote({ initialContent });
 
   const handleEditorChange = async () => {
-    // Ambil isi dokumen saat ini
     const content = JSON.stringify(editor.document);
-    // Auto-save diam-diam ke Supabase
     await supabase.from('notes').update({ content }).eq('id', note.id);
   };
 
   return (
-    <BlockNoteView 
-      editor={editor} 
-      theme={isDarkMode ? 'dark' : 'light'} 
-      onChange={handleEditorChange} 
+    <BlockNoteView
+      editor={editor}
+      theme={isDarkMode ? 'dark' : 'light'}
+      onChange={handleEditorChange}
     />
   );
 }
 
-// Komponen Input Tanggal Custom
 const CustomDateInput = forwardRef<HTMLInputElement, any>(({ value, onClick }, ref) => (
   <div style={{ position: 'relative', display: 'flex', alignItems: 'center', width: '100%' }}>
     <PiCalendar style={{ position: 'absolute', left: '12px', color: 'var(--text-secondary)', fontSize: '1.2rem', pointerEvents: 'none', zIndex: 1 }} />
@@ -77,32 +72,24 @@ function App() {
 
   const isDark = isDarkMode || document.documentElement.getAttribute('data-theme') === 'dark';
 
-  // State Data Kosong (Akan diisi otomatis dari DB)
   const [folders, setFolders] = useState<Folder[]>([])
   const [tasks, setTasks] = useState<Task[]>([])
   const [goals, setGoals] = useState<{ id: string; text: string; done: boolean; mode: 'daily' | 'weekly' }[]>([]);
 
-  // Mengambil Data dari Supabase Saat Aplikasi Dibuka
   useEffect(() => {
     fetchData();
   }, []);
 
   const fetchData = async () => {
-    // Fetch Tasks
     const { data: tasksData } = await supabase.from('tasks').select('*');
     if (tasksData) setTasks(tasksData as Task[]);
 
-    // Fetch Goals
     const { data: goalsData } = await supabase.from('goals').select('*').order('created_at', { ascending: true });
     if (goalsData) {
       setGoals(goalsData.map(g => ({ id: g.id, text: g.text, done: g.is_done, mode: g.mode as 'daily' | 'weekly' })));
     }
 
-    // Fetch Folders beserta Notes dan Content-nya
-    const { data: foldersData } = await supabase
-      .from('folders')
-      .select(`*, notes (*)`)
-      .order('created_at', { ascending: true });
+    const { data: foldersData } = await supabase.from('folders').select(`*, notes (*)`).order('created_at', { ascending: true });
 
     if (foldersData) {
       const formattedFolders: Folder[] = foldersData.map((f: any) => ({
@@ -114,7 +101,7 @@ function App() {
           id: n.id,
           title: n.title,
           type: n.type,
-          content: n.content // Data isi editor
+          content: n.content
         }))
       }));
       setFolders(formattedFolders);
@@ -143,10 +130,7 @@ function App() {
   const [quickAddPopover, setQuickAddPopover] = useState<{ isOpen: boolean; target: HTMLElement | null; date: string }>({ isOpen: false, target: null, date: '' });
   const [activeNote, setActiveNote] = useState<Note | null>(null)
 
-  const [timerDuration, setTimerDuration] = useState(25 * 60)
-  const [timeLeft, setTimeLeft] = useState(25 * 60)
-  const [isTimerRunning, setIsTimerRunning] = useState(false)
-  const [showFullscreenTimer, setShowFullscreenTimer] = useState(false)
+
   const [showTimerSetting, setShowTimerSetting] = useState(false)
 
   const [taskModal, setTaskModal] = useState<{
@@ -159,6 +143,8 @@ function App() {
   const [eventNotes, setEventNotes] = useState<Record<string, string>>({});
   const [openEventDetail, setOpenEventDetail] = useState<{ isOpen: boolean; event: Task | null }>({ isOpen: false, event: null });
   const [eventPopover, setEventPopover] = useState<{ isOpen: boolean; target: HTMLElement | null; date: string }>({ isOpen: false, target: null, date: '' });
+
+  const editor = useCreateBlockNote()
 
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', isDarkMode ? 'dark' : 'light')
@@ -177,17 +163,9 @@ function App() {
     }
   }, [contextMenu, noteContextMenu])
 
-  useEffect(() => {
-    let interval: number | undefined
-    if (isTimerRunning && timeLeft > 0) {
-      interval = setInterval(() => setTimeLeft(prev => prev - 1), 1000)
-    } else if (timeLeft === 0) setIsTimerRunning(false)
-    return () => clearInterval(interval)
-  }, [isTimerRunning, timeLeft])
 
   const toggleSidebar = () => setIsSidebarOpen(!isSidebarOpen)
   const toggleTheme = () => setIsDarkMode(!isDarkMode)
-  const formatTime = (seconds: number) => `${Math.floor(seconds / 60)}:${(seconds % 60).toString().padStart(2, '0')}`
 
   const showToast = (message: string, type: 'success' | 'error' = 'success') => {
     const id = Date.now().toString()
@@ -195,17 +173,13 @@ function App() {
     setTimeout(() => setToasts(prev => prev.filter(t => t.id !== id)), 3000)
   }
 
-  // === FUNGSI SUPABASE CRUD PINTAR ===
-
   const handleAddGoal = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     if (goalInput.trim()) {
-      const { data, error } = await supabase.from('goals').insert([{ 
-        text: goalInput.trim(), 
-        mode: goalMode, 
-        is_done: false 
+      const { data, error } = await supabase.from('goals').insert([{
+        text: goalInput.trim(), mode: goalMode, is_done: false
       }]).select().single();
-      
+
       if (data) {
         setGoals([...goals, { id: data.id, text: data.text, done: data.is_done, mode: data.mode }]);
         setGoalInput('');
@@ -241,7 +215,6 @@ function App() {
         setActiveView('note')
         showToast('Catatan berhasil dibuat')
       }
-
     } else if (inputModal.mode === 'create_canvas' && inputModal.folderId) {
       const { data, error } = await supabase.from('notes').insert([{ folder_id: inputModal.folderId, title: value, type: 'canvas' }]).select().single();
       if (data) {
@@ -333,7 +306,7 @@ function App() {
 
   const confirmDeleteFolder = async () => {
     const { folderId, folderName } = deleteModal
-    const { error } = await supabase.from('folders').delete().eq('id', folderId); 
+    const { error } = await supabase.from('folders').delete().eq('id', folderId);
     if (!error) {
       setFolders(prev => prev.filter(f => f.id !== folderId))
       setTasks(prev => prev.filter(t => t.category !== folderName))
@@ -376,7 +349,7 @@ function App() {
     const { error } = await supabase.from('folders').update({ name: newName, color: newColor }).eq('id', folderId);
     if (!error) {
       if (newName !== oldName) {
-         await supabase.from('tasks').update({ category: newName }).eq('category', oldName);
+        await supabase.from('tasks').update({ category: newName }).eq('category', oldName);
       }
       setFolders(prev => prev.map(f => (f.id === folderId ? { ...f, name: newName, color: newColor } : f)))
       setTasks(prev => prev.map(t => (t.category === oldName ? { ...t, category: newName } : t)))
@@ -458,6 +431,34 @@ function App() {
 
 
   // === SISA FUNGSI UI BIASA ===
+
+  const handleSearchResultClick = (result: SearchResult) => {
+    if (result.type === 'note') {
+      const note = folders.flatMap(f => f.notes).find(n => n.id === result.id);
+      if (note) {
+        setActiveNote(note);
+        setActiveView('note');
+      }
+    } else if (result.type === 'task') {
+      const task = tasks.find(t => t.id === result.id);
+      if (task) {
+        setActiveView('dashboard');
+        setDashboardTab('calendar');
+
+        // FIX: Pindah bulan kalender secara otomatis ke bulan task tersebut!
+        const [yearStr, monthStr] = task.date.split('-');
+        setCalendarYear(parseInt(yearStr, 10));
+        setCalendarMonth(parseInt(monthStr, 10) - 1);
+
+        setTimeout(() => {
+          const dayCell = document.querySelector(`.cal-day[data-date-str="${task.date}"]`);
+          if (dayCell) {
+            (dayCell as HTMLElement).click();
+          }
+        }, 100);
+      }
+    }
+  };
 
   const openEventPopover = (e: React.MouseEvent, date: string) => {
     setEventPopover({ isOpen: true, target: e.currentTarget as HTMLElement, date });
@@ -546,7 +547,6 @@ function App() {
 
   const getCoverGradient = (id: string) => {
     const gradients = ['linear-gradient(120deg, #84fab0 0%, #8fd3f4 100%)', 'linear-gradient(120deg, #fccb90 0%, #d57eeb 100%)', 'linear-gradient(120deg, #e0c3fc 0%, #8ec5fc 100%)', 'linear-gradient(120deg, #f093fb 0%, #f5576c 100%)']
-    // Safe extraction of numbers, falling back to 0 if none
     const numMatch = id.match(/\d+/g);
     const index = numMatch ? parseInt(numMatch.join('')) % gradients.length : 0;
     return gradients[index];
@@ -591,87 +591,18 @@ function App() {
             </li>
           ))}
         </ul>
-
-          <div className="pomodoro-widget" style={{ cursor: 'pointer', position: 'relative', zIndex: 1 }} onClick={() => setShowFullscreenTimer(true)}>
-            <div className="timer-label"><PiTimer style={{ verticalAlign: 'text-bottom', marginRight: '4px' }} /> Focus Timer</div>
-            <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', flexDirection: 'column' }}>
-              <CircleProgress
-                key={isDark ? 'dark' : 'light'}
-                progress={1 - timeLeft / timerDuration}
-                size={110}
-                strokeWidth={10}
-                bgColor={isDark ? '#444' : '#23243a33'}
-              >
-                <div className="timer-display" style={{ fontSize: 28 }}>{formatTime(timeLeft)}</div>
-              </CircleProgress>
-            </div>
-            <button className="btn-timer" onClick={e => { e.stopPropagation(); setIsTimerRunning(!isTimerRunning); }}>{isTimerRunning ? 'Pause' : 'Start'}</button>
-            <button className="btn-timer" onClick={e => { e.stopPropagation(); setIsTimerRunning(false); setTimeLeft(timerDuration) }}>Reset</button>
-            <button className="btn-timer" style={{ marginTop: 8 }} onClick={e => { e.stopPropagation(); setShowTimerSetting(true); }}>Set Timer</button>
-            <div className="timer-fullscreen-hint">Klik untuk fullscreen</div>
-          </div>
-
         <div className="theme-wrapper">
           <span className="theme-label">Dark Mode</span>
           <button className={`toggle-switch ${isDarkMode ? 'active' : ''}`} onClick={toggleTheme}><div className="toggle-handle">{isDarkMode ? <PiMoon size={12} color="#333" style={{ marginTop: '3px', marginLeft: '3px' }} /> : <PiSun size={12} color="#F59E0B" style={{ marginTop: '3px', marginLeft: '3px' }} />}</div></button>
         </div>
       </aside>
-
-      {showFullscreenTimer && (
-        <div className="fullscreen-timer-overlay" onClick={() => setShowFullscreenTimer(false)}>
-          <div className="fullscreen-timer-card" onClick={e => e.stopPropagation()}>
-            <button className="fullscreen-timer-exit" onClick={() => setShowFullscreenTimer(false)} title="Keluar fullscreen">&times;</button>
-            <div className="fullscreen-timer-label"><PiTimer style={{ verticalAlign: 'text-bottom', marginRight: '8px', fontSize: '2rem' }} /> Focus Timer</div>
-            <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', flexDirection: 'column', marginBottom: '2.2rem', width: 260, height: 260, marginLeft: 'auto', marginRight: 'auto' }}>
-              <CircleProgress
-                key={isDark ? 'dark' : 'light'}
-                progress={1 - timeLeft / timerDuration}
-                size={240}
-                strokeWidth={14}
-                bgColor={isDark ? '#444' : '#23243a33'}
-              >
-                <div style={{
-                  display: 'flex', alignItems: 'center', justifyContent: 'center', width: '100%', height: '100%', fontSize: 64, fontWeight: 800,
-                  color: 'var(--accent, #f59e0b)', textShadow: '0 0 40px var(--accent-glow, #fbbf24)'
-                }}>
-                  {formatTime(timeLeft)}
-                </div>
-              </CircleProgress>
-            </div>
-            <div className="fullscreen-timer-controls">
-              <button className="btn-timer fullscreen" onClick={() => setIsTimerRunning(!isTimerRunning)}>{isTimerRunning ? 'Pause' : 'Start'}</button>
-              <button className="btn-timer fullscreen" onClick={() => { setIsTimerRunning(false); setTimeLeft(timerDuration) }}>Reset</button>
-              <button className="btn-timer fullscreen" onClick={() => setShowTimerSetting(true)}>Set Timer</button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {showTimerSetting && (
-        <div className="fullscreen-timer-overlay" onClick={() => setShowTimerSetting(false)}>
-          <div className="fullscreen-timer-card" onClick={e => e.stopPropagation()} style={{ minWidth: 320, minHeight: 0, padding: '2.5rem 2rem' }}>
-            <div className="fullscreen-timer-label">Set Timer Duration</div>
-            <form style={{ display: 'flex', flexDirection: 'column', gap: 18, alignItems: 'center' }} onSubmit={e => {
-              e.preventDefault();
-              const form = e.target as HTMLFormElement;
-              const min = Number((form.elements.namedItem('minutes') as HTMLInputElement).value);
-              if (min > 0 && min <= 180) {
-                setTimerDuration(min * 60);
-                setTimeLeft(min * 60);
-                setShowTimerSetting(false);
-              }
-            }}>
-              <input name="minutes" type="number" min={1} max={180} defaultValue={Math.round(timerDuration/60)} className="goals-input" style={{ width: 120, textAlign: 'center', fontSize: 22 }} />
-              <button className="btn-timer fullscreen" type="submit">Set</button>
-            </form>
-          </div>
-        </div>
-      )}
-
       <main className="editor-area">
         <header className="editor-header">
-          <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', flex: 1 }}>
             {!isSidebarOpen && <button className="btn-graph" onClick={toggleSidebar}><PiList /></button>}
+            <GlobalSearch tasks={tasks} folders={folders} onResultClick={handleSearchResultClick} />
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
             <span className="breadcrumb">
               {activeView === 'dashboard' ? 'Dashboard' : (
                 <>
@@ -723,7 +654,9 @@ function App() {
               <DragDropContext onDragEnd={onDragEnd}>
                 <div className="category-views">
                   {folders.map(folder => {
-                    const folderTasks = tasks.filter(t => t.category === folder.name);
+                    const folderTasks = tasks
+                      .filter(t => t.category === folder.name)
+                      .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
                     const isCategoryOpen = openCategories[folder.id] ?? true;
                     return (
                       <div key={folder.id} className="category-group">
@@ -748,10 +681,19 @@ function App() {
                                         {...provided.dragHandleProps}
                                         className={`task-row ${task.status === 'Done' ? 'completed' : ''} ${snapshot.isDragging ? 'dragging' : ''}`}
                                       >
-                                        <input type="checkbox" className="custom-checkbox" checked={task.status === 'Done'} onChange={() => toggleTaskStatus(task.id, task.status)} />
+                                        <input
+                                          type="checkbox"
+                                          className="custom-checkbox"
+                                          checked={task.status === 'Done'}
+                                          onChange={() => toggleTaskStatus(task.id, task.status)}
+                                        />
                                         <span className="task-title" title={task.title}>{task.title}</span>
-                                        <span className="task-date">{new Date(task.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</span>
-                                        <button onClick={() => deleteTask(task.id)} className="btn-icon-danger"><PiTrash /></button>
+                                        <span className="task-date" style={{ textAlign: 'right' }}>
+                                          {new Date(task.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                                        </span>
+                                        <button onClick={() => deleteTask(task.id)} className="btn-icon-danger">
+                                          <PiTrash />
+                                        </button>
                                       </div>
                                     )}
                                   </Draggable>
@@ -811,12 +753,12 @@ function App() {
                         style={{ position: 'relative', cursor: 'pointer' }}
                         onDrop={onDropEvent}
                         onDragOver={onDragOver}
+                        data-date-str={dateStr}
                       >
                         <div className="day-header">
                           <span className="day-num">{day}</span>
                         </div>
                         {dayTasks.length > 0 && (() => {
-                          // Show up to 2 short text pills, rest as dots
                           const SHOW_PILLS = 2;
                           const shownPills = dayTasks.slice(0, SHOW_PILLS);
                           const restDots = dayTasks.slice(SHOW_PILLS);
@@ -872,11 +814,8 @@ function App() {
                     const isToday = eventPopover.date === todayStr;
                     return (
                       <>
-                        {/* Backdrop */}
                         <div className="day-panel-backdrop" onClick={closeEventPopover} />
-                        {/* Side panel */}
                         <div className="day-panel">
-                          {/* Header */}
                           <div className="day-panel-header">
                             <div className="day-panel-header-left">
                               <div className="day-panel-date-num">
@@ -895,7 +834,6 @@ function App() {
                             <button className="day-panel-close" onClick={closeEventPopover}><PiX size={20} /></button>
                           </div>
 
-                          {/* Summary bar */}
                           <div className="day-panel-summary">
                             <span className="day-panel-summary-item" style={{ '--sc': '#6366f1' } as React.CSSProperties}>
                               <span className="dps-num">{dateTasks.filter(t => t.status === 'To Do').length}</span>
@@ -911,7 +849,6 @@ function App() {
                             </span>
                           </div>
 
-                          {/* Scrollable event list */}
                           <div className="day-panel-body">
                             {dateTasks.length === 0 ? (
                               <div className="day-panel-empty">
@@ -926,10 +863,8 @@ function App() {
                                 const statusIcon = task.status === 'Done' ? '✓' : task.status === 'In Progress' ? '◑' : '○';
                                 return (
                                   <div key={task.id} className="day-panel-event-card" style={{ '--fc': folderColor } as React.CSSProperties}>
-                                    {/* Left accent bar */}
                                     <div className="dpec-bar" style={{ background: folderColor }} />
                                     <div className="dpec-body">
-                                      {/* Top row: status badge + category */}
                                       <div className="dpec-top">
                                         <span className="dpec-status-badge" style={{ background: statusColor + '22', color: statusColor, borderColor: statusColor + '44' }}>
                                           {statusIcon} {task.status}
@@ -938,11 +873,9 @@ function App() {
                                           {task.category}
                                         </span>
                                       </div>
-                                      {/* Title */}
                                       <div className={`dpec-title ${task.status === 'Done' ? 'dpec-done' : ''}`}>
                                         {task.title}
                                       </div>
-                                      {/* Actions */}
                                       <div className="dpec-actions">
                                         <button className="dpec-btn dpec-btn-check"
                                           onClick={() => toggleTaskStatus(task.id, task.status)}
@@ -970,7 +903,6 @@ function App() {
                             )}
                           </div>
 
-                          {/* Footer: Add button */}
                           <div className="day-panel-footer">
                             <button className="day-panel-add-btn"
                               onClick={() => { openQuickAdd({ currentTarget: null } as any, eventPopover.date); closeEventPopover(); }}>
@@ -1084,7 +1016,6 @@ function App() {
                 {activeNote?.type === 'canvas' ? (
                   <div className="canvas-placeholder"><PiSquaresFour size={48} /><h3>Canvas Mode</h3><p>Draw diagrams and create visuals here.</p></div>
                 ) : (
-                  /* 3. Gunakan Komponen Editor Pintar yang Bisa Load/Save Content */
                   <EditorWrapper key={activeNote?.id} note={activeNote!} isDarkMode={isDarkMode} />
                 )}
               </div>
