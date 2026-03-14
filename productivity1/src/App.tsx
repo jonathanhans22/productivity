@@ -12,6 +12,7 @@ import '@blocknote/core/fonts/inter.css'
 import '@blocknote/mantine/style.css'
 import './App.css'
 import { supabase } from './lib/supabase'
+import logoSaya from './assets/logobaru.png'
 
 type Note = { id: string; title: string; type: 'note'; content?: any; tags?: string[]; icon?: string; cover?: string; }
 type Folder = { id: string; name: string; isOpen: boolean; notes: Note[]; color: string }
@@ -545,7 +546,7 @@ function App() {
           {/* LOGO CUSTOM KAMU */}
           <div className="rail-avatar" style={{ padding: 0, overflow: 'hidden', background: 'transparent' }}>
             <img
-              src="logobaru.png"
+              src={logoSaya}
               alt="Profile"
               style={{ width: '100%', height: '100%', objectFit: 'cover' }}
             />
