@@ -545,7 +545,7 @@ function App() {
           {/* LOGO CUSTOM KAMU */}
           <div className="rail-avatar" style={{ padding: 0, overflow: 'hidden', background: 'transparent' }}>
             <img
-              src="logoj-removebg-preview.png"
+              src="logobaru.png"
               alt="Profile"
               style={{ width: '100%', height: '100%', objectFit: 'cover' }}
             />
