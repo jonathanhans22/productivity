@@ -94,12 +94,17 @@
 .goals-item {
   display: flex;
   align-items: center;
-  gap: 0.7rem;
-  font-size: 1.05rem;
-  padding: 7px 0;
-  cursor: pointer;
-  border-bottom: 1px solid var(--border-subtle, #2d2e4a);
-  transition: background 0.15s;
+}
+
+.goals-item .btn-icon-danger {
+  opacity: 0;
+  transition: opacity 0.2s ease;
+  margin-left: auto;
+}
+
+/* Tombol hapus hanya muncul saat di-hover/disentuh */
+.goals-item:hover .btn-icon-danger {
+  opacity: 1;
 }
 
 .goals-item:last-child {
@@ -3194,8 +3199,18 @@ select.form-control {
 }
 
 .heatmap-box.level-0 {
-  background: var(--bg-hover);
-  opacity: 0.5;
+  opacity: 1 !important;
+  border: 1px solid var(--border-strong);
+}
+
+[data-theme='light'] .heatmap-box.level-0 {
+  background: #f1f5f9 !important;
+  border-color: #cbd5e1 !important;
+}
+
+[data-theme='dark'] .heatmap-box.level-0 {
+  background: #1e293b !important;
+  border-color: #334155 !important;
 }
 
 .heatmap-box.level-1 {

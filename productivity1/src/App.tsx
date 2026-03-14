@@ -18,7 +18,6 @@ type Folder = { id: string; name: string; isOpen: boolean; notes: Note[]; color:
 type Task = { id: string; title: string; date: string; category: string; status: string }
 type SearchResult = { id: string; title: string; type: 'task' | 'note'; folderId?: string; }
 
-// Tipe Data untuk Riwayat Kebiasaan
 type GoalHistory = { id: string; date: string; mode: 'daily' | 'weekly'; progress: number; }
 
 const EMOJI_LIST = ['😀', '🚀', '🔥', '💻', '📝', '✨', '🌟', '💡', '📌', '🎯', '🎨', '📊', '📈', '🧠', '⚡', '✅', '🎈', '🎉', '🏆', '📚', '🎵', '☕', '✈️', '🌿'];
@@ -85,7 +84,6 @@ function App() {
     fetchData();
   }, []);
 
-  // FUNGSI UNTUK MENDAPATKAN TANGGAL HARI SENIN (Untuk Weekly Reset)
   const getMonday = (d: Date) => {
     const date = new Date(d);
     const day = date.getDay();
@@ -94,7 +92,6 @@ function App() {
   }
 
   const fetchData = async () => {
-    // 1. Fetch Tasks & Folders
     const { data: tasksData } = await supabase.from('tasks').select('*');
     if (tasksData) setTasks(tasksData as Task[]);
 
@@ -108,21 +105,18 @@ function App() {
       })));
     }
 
-    // 2. Fetch Goals
     let currentGoals: any[] = [];
     const { data: goalsData } = await supabase.from('goals').select('*').order('created_at', { ascending: true });
     if (goalsData) {
       currentGoals = goalsData.map(g => ({ id: g.id, text: g.text, done: g.is_done, mode: g.mode as 'daily' | 'weekly' }));
     }
 
-    // 3. LOGIKA RESET OTOMATIS (DAILY & WEEKLY)
     const todayStr = new Date().toLocaleDateString('en-CA');
     const currentMondayStr = getMonday(new Date());
 
     const lastOpenedDaily = localStorage.getItem('last_opened_daily');
     const lastOpenedWeekly = localStorage.getItem('last_opened_weekly');
 
-    // Reset Harian
     if (!lastOpenedDaily) {
       localStorage.setItem('last_opened_daily', todayStr);
     } else if (lastOpenedDaily !== todayStr) {
@@ -136,7 +130,6 @@ function App() {
       localStorage.setItem('last_opened_daily', todayStr);
     }
 
-    // Reset Mingguan (Hari Senin)
     if (!lastOpenedWeekly) {
       localStorage.setItem('last_opened_weekly', currentMondayStr);
     } else if (lastOpenedWeekly !== currentMondayStr) {
@@ -152,7 +145,6 @@ function App() {
 
     setGoals(currentGoals);
 
-    // 4. Fetch History
     const { data: historyData } = await supabase.from('goals_history').select('*');
     if (historyData) setHistory(historyData as GoalHistory[]);
   };
@@ -181,6 +173,10 @@ function App() {
   const [inputModal, setInputModal] = useState<{ isOpen: boolean; mode: 'create_folder' | 'create_note'; folderId?: string }>({ isOpen: false, mode: 'create_folder' })
   const [toasts, setToasts] = useState<{ id: string; message: string; type: 'success' | 'error' }[]>([])
   const [quickAddPopover, setQuickAddPopover] = useState<{ isOpen: boolean; target: HTMLElement | null; date: string }>({ isOpen: false, target: null, date: '' });
+
+  // Custom Modal States untuk Delete Goal dan Add Tag
+  const [deleteGoalModal, setDeleteGoalModal] = useState<{ isOpen: boolean; goalId: string }>({ isOpen: false, goalId: '' });
+  const [addTagModal, setAddTagModal] = useState(false);
 
   const [activeNote, setActiveNote] = useState<Note | null>(null)
 
@@ -234,6 +230,19 @@ function App() {
       const { data } = await supabase.from('goals').insert([{ text: goalInput.trim(), mode: goalMode, is_done: false }]).select().single();
       if (data) { setGoals([...goals, { id: data.id, text: data.text, done: data.is_done, mode: data.mode }]); setGoalInput(''); } else { showToast('Gagal menambah goal', 'error'); }
     }
+  };
+
+  const handleDeleteGoalClick = (e: React.MouseEvent, goalId: string) => {
+    e.stopPropagation();
+    setDeleteGoalModal({ isOpen: true, goalId });
+  };
+
+  const confirmDeleteGoal = async () => {
+    const goalId = deleteGoalModal.goalId;
+    setGoals(prev => prev.filter(g => g.id !== goalId));
+    await supabase.from('goals').delete().eq('id', goalId);
+    showToast('Target berhasil dihapus');
+    setDeleteGoalModal({ isOpen: false, goalId: '' });
   };
 
   const toggleGoalDone = async (goalId: string, currentStatus: boolean) => {
@@ -445,8 +454,15 @@ function App() {
 
   const allTags = Array.from(new Set(folders.flatMap(f => f.notes.flatMap(n => n.tags || [])))).sort();
 
-  const handleAddTagToNote = async () => {
-    const newTag = window.prompt('Masukkan nama label baru:');
+  const handleAddTagClick = () => {
+    setAddTagModal(true);
+  }
+
+  const submitAddTag = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    const formData = new FormData(e.currentTarget);
+    const newTag = formData.get('tagValue') as string;
+
     if (newTag && newTag.trim() && activeNote) {
       const tagStr = newTag.trim().toLowerCase();
       const currentTags = activeNote.tags || [];
@@ -457,7 +473,8 @@ function App() {
         await supabase.from('notes').update({ tags: updatedTags }).eq('id', activeNote.id);
       }
     }
-  }
+    setAddTagModal(false);
+  };
 
   const handleRemoveTagFromNote = async (tagToRemove: string) => {
     if (activeNote) {
@@ -468,10 +485,8 @@ function App() {
     }
   }
 
-  // === RENDER LOGIC UNTUK HEATMAP (DAILY) ===
   const renderHeatmap = () => {
     const boxes = [];
-    // Menampilkan 28 hari ke belakang
     for (let i = 27; i >= 0; i--) {
       const d = new Date();
       d.setDate(d.getDate() - i);
@@ -486,21 +501,13 @@ function App() {
       else if (prog > 50 && prog <= 75) level = 3;
       else if (prog > 75) level = 4;
 
-      boxes.push(
-        <div
-          key={dateStr}
-          className={`heatmap-box level-${level}`}
-          title={`${d.toLocaleDateString('id-ID', { day: 'numeric', month: 'short' })}: ${prog}% Selesai`}
-        />
-      );
+      boxes.push(<div key={dateStr} className={`heatmap-box level-${level}`} title={`${d.toLocaleDateString('id-ID', { day: 'numeric', month: 'short' })}: ${prog}% Selesai`} />);
     }
     return boxes;
   };
 
-  // === RENDER LOGIC UNTUK KARTU (WEEKLY) ===
   const renderWeeklyCards = () => {
     const cards = [];
-    // 3 Minggu yang lalu
     for (let i = 3; i >= 1; i--) {
       const d = new Date();
       const day = d.getDay();
@@ -513,20 +520,15 @@ function App() {
       cards.push(
         <div key={pastMondayStr} className="weekly-card">
           <span className="weekly-card-label">{i} Mg Lalu</span>
-          <div className="weekly-card-circle" style={{ '--progress': `${prog}%` } as React.CSSProperties}>
-            <span>{prog}%</span>
-          </div>
+          <div className="weekly-card-circle" style={{ '--progress': `${prog}%` } as React.CSSProperties}><span>{prog}%</span></div>
         </div>
       );
     }
 
-    // Minggu saat ini (Real-time tracking)
     cards.push(
       <div key="current" className="weekly-card" style={{ borderColor: 'var(--accent)' }}>
         <span className="weekly-card-label" style={{ color: 'var(--accent)' }}>Mg Ini</span>
-        <div className="weekly-card-circle" style={{ '--progress': `${progress}%` } as React.CSSProperties}>
-          <span>{progress}%</span>
-        </div>
+        <div className="weekly-card-circle" style={{ '--progress': `${progress}%` } as React.CSSProperties}><span>{progress}%</span></div>
       </div>
     );
 
@@ -537,10 +539,17 @@ function App() {
     <div className={`app-container ${isZenMode ? 'zen-mode' : ''}`} onClick={() => { setShowIconPicker(false); setShowCoverPicker(false); }}>
       <div className="aurora-bg"></div>
 
-      {/* --- SIDEBAR RAIL (Ikon Navigasi Kiri) --- */}
+      {/* --- SIDEBAR RAIL --- */}
       {!isZenMode && (
         <nav className="sidebar-rail" onClick={() => setIsSidebarOpen(false)}>
-          <div className="rail-avatar">CH</div>
+          {/* LOGO CUSTOM KAMU */}
+          <div className="rail-avatar" style={{ padding: 0, overflow: 'hidden', background: 'transparent' }}>
+            <img
+              src="logoj-removebg-preview.png"
+              alt="Profile"
+              style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+            />
+          </div>
           <button className={`rail-icon ${activeView === 'dashboard' ? 'active' : ''}`} onClick={(e) => { e.stopPropagation(); setActiveView('dashboard'); setDashboardTab('category'); setIsSidebarOpen(false); }} title="Dashboard"><PiTelevision /></button>
           <button className={`rail-icon ${activeView === 'note' ? 'active' : ''}`} onClick={(e) => { e.stopPropagation(); setActiveView('note'); setActiveNote(null); setIsSidebarOpen(true); }} title="My Folders & Notes"><PiFolder /></button>
           <div style={{ marginTop: 'auto' }}>
@@ -549,7 +558,7 @@ function App() {
         </nav>
       )}
 
-      {/* --- SIDEBAR PANEL (Panel Catatan & Folder) --- */}
+      {/* --- SIDEBAR PANEL --- */}
       <aside className={`sidebar-panel ${(!isSidebarOpen || isZenMode) ? 'closed' : ''}`}>
         <div style={{ marginBottom: '1rem' }}><GlobalSearch tasks={tasks} folders={folders} onResultClick={handleSearchResultClick} /></div>
         <div className="sidebar-section-header"><span>My Folders</span><button onClick={createNewFolder} title="New Folder"><PiPlus /></button></div>
@@ -626,32 +635,23 @@ function App() {
               </div>
               <div className="goals-progress-bar-bg"><div className="goals-progress-bar" style={{ width: progress + '%' }} /></div>
 
-              {/* --- UI HABIT TRACKER (RIWAYAT KONSISTENSI DARI DB) --- */}
               <div className="habit-tracker-container">
-                <div className="tracker-header">
-                  <span>{goalMode === 'daily' ? 'Riwayat 28 Hari Terakhir' : 'Riwayat 4 Minggu Terakhir'}</span>
-                </div>
-
-                {goalMode === 'daily' ? (
-                  <div className="heatmap-grid">
-                    {renderHeatmap()}
-                  </div>
-                ) : (
-                  <div className="weekly-cards-grid">
-                    {renderWeeklyCards()}
-                  </div>
-                )}
+                <div className="tracker-header"><span>{goalMode === 'daily' ? 'Riwayat 28 Hari Terakhir' : 'Riwayat 4 Minggu Terakhir'}</span></div>
+                {goalMode === 'daily' ? (<div className="heatmap-grid">{renderHeatmap()}</div>) : (<div className="weekly-cards-grid">{renderWeeklyCards()}</div>)}
               </div>
 
               <form className="goals-add-form" onSubmit={handleAddGoal}>
                 <input className="goals-input" placeholder={goalMode === 'daily' ? 'Add daily goal...' : 'Add weekly goal...'} value={goalInput} onChange={e => setGoalInput(e.target.value)} />
                 <button className="goals-add-btn" type="submit">Add</button>
               </form>
+
               <ul className="goals-list">
                 {filteredGoals.length === 0 && <li className="goals-empty">No goals yet.</li>}
                 {filteredGoals.map((g) => (
                   <li key={g.id} className={g.done ? 'goals-item done' : 'goals-item'} onClick={() => toggleGoalDone(g.id, g.done)}>
-                    <span className="goals-check">{g.done ? '✔' : ''}</span><span className="goals-text">{g.text}</span>
+                    <span className="goals-check">{g.done ? '✔' : ''}</span>
+                    <span className="goals-text" style={{ flex: 1 }}>{g.text}</span>
+                    <button className="btn-icon-danger" onClick={(e) => handleDeleteGoalClick(e, g.id)} title="Hapus Target"><PiTrash size={16} /></button>
                   </li>
                 ))}
               </ul>
@@ -1030,7 +1030,7 @@ function App() {
                       </button>
                     </span>
                   ))}
-                  <span className="meta-tag-add" onClick={handleAddTagToNote}>
+                  <span className="meta-tag-add" onClick={handleAddTagClick}>
                     <PiPlus style={{ marginRight: '4px' }} /> Add Tag
                   </span>
                 </div>
@@ -1232,6 +1232,41 @@ function App() {
                 <DatePicker selected={new Date(taskModal.defaultDate)} onChange={(date: Date | null) => { if (date) { setTaskModal(prev => ({ ...prev, defaultDate: date.toISOString().split('T')[0] })); } }} dateFormat="yyyy-MM-dd" customInput={<CustomDateInput />} />
               </div>
               <div className="modal-actions"><button type="button" className="btn-cancel" onClick={() => setTaskModal({ ...taskModal, isOpen: false })}>Cancel</button><button type="submit" className="btn-primary">Save</button></div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL CUSTOM UNTUK HAPUS GOAL */}
+      {deleteGoalModal.isOpen && (
+        <div className="modal-overlay" onClick={() => setDeleteGoalModal({ isOpen: false, goalId: '' })}>
+          <div className="modal-content" onClick={e => e.stopPropagation()}>
+            <h3 style={{ marginTop: 0 }}>Hapus Target?</h3>
+            <p style={{ color: 'var(--text-secondary)', fontSize: '0.95rem', lineHeight: '1.5' }}>
+              Yakin ingin menghapus target ini? Data tidak dapat dikembalikan.
+            </p>
+            <div className="modal-actions">
+              <button className="btn-cancel" onClick={() => setDeleteGoalModal({ isOpen: false, goalId: '' })}>Batal</button>
+              <button className="btn-danger" onClick={confirmDeleteGoal}>Hapus</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL CUSTOM UNTUK TAMBAH TAG (LABEL) */}
+      {addTagModal && (
+        <div className="modal-overlay" onClick={() => setAddTagModal(false)}>
+          <div className="modal-content" onClick={e => e.stopPropagation()}>
+            <h3 style={{ marginTop: 0 }}>Tambah Label Baru</h3>
+            <form onSubmit={submitAddTag}>
+              <div className="form-group">
+                <label>Nama Label</label>
+                <input name="tagValue" className="form-control" autoFocus required placeholder="Contoh: penting, referensi..." />
+              </div>
+              <div className="modal-actions">
+                <button type="button" className="btn-cancel" onClick={() => setAddTagModal(false)}>Batal</button>
+                <button type="submit" className="btn-primary">Tambah</button>
+              </div>
             </form>
           </div>
         </div>
