@@ -1,4 +1,4 @@
-import { useState, useEffect, forwardRef } from 'react'
+import { useState, useEffect, forwardRef, useRef } from 'react'
 import DatePicker from 'react-datepicker'
 import 'react-datepicker/dist/react-datepicker.css'
 import { useCreateBlockNote } from '@blocknote/react'
@@ -32,16 +32,26 @@ const COVER_LIST = [
   '#1e2029', '#333645'
 ];
 
-function EditorWrapper({ note, isDarkMode }: { note: Note, isDarkMode: boolean }) {
+function EditorWrapper({ note, isDarkMode, onContentChange }: { note: Note, isDarkMode: boolean, onContentChange: (noteId: string, content: string) => void }) {
   const initialContent = note.content && typeof note.content === 'string'
     ? JSON.parse(note.content)
     : (typeof note.content === 'object' ? note.content : undefined);
 
   const editor = useCreateBlockNote({ initialContent });
+  const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const handleEditorChange = async () => {
+  const handleEditorChange = () => {
     const content = JSON.stringify(editor.document);
-    await supabase.from('notes').update({ content }).eq('id', note.id);
+
+    onContentChange(note.id, content);
+
+    if (saveTimeoutRef.current) {
+      clearTimeout(saveTimeoutRef.current);
+    }
+
+    saveTimeoutRef.current = setTimeout(async () => {
+      await supabase.from('notes').update({ content }).eq('id', note.id);
+    }, 1000);
   };
 
   return (
@@ -175,7 +185,6 @@ function App() {
   const [toasts, setToasts] = useState<{ id: string; message: string; type: 'success' | 'error' }[]>([])
   const [quickAddPopover, setQuickAddPopover] = useState<{ isOpen: boolean; target: HTMLElement | null; date: string }>({ isOpen: false, target: null, date: '' });
 
-  // Custom Modal States untuk Delete Goal dan Add Tag
   const [deleteGoalModal, setDeleteGoalModal] = useState<{ isOpen: boolean; goalId: string }>({ isOpen: false, goalId: '' });
   const [addTagModal, setAddTagModal] = useState(false);
 
@@ -398,6 +407,14 @@ function App() {
     }
   }
 
+  const onNoteContentChange = (noteId: string, newContent: string) => {
+    setFolders(prev => prev.map(f => ({
+      ...f,
+      notes: f.notes.map(n => n.id === noteId ? { ...n, content: newContent } : n)
+    })));
+    setActiveNote(prev => prev && prev.id === noteId ? { ...prev, content: newContent } : prev);
+  };
+
   const handleSearchResultClick = (result: SearchResult) => {
     if (result.type === 'note') {
       const note = folders.flatMap(f => f.notes).find(n => n.id === result.id);
@@ -540,10 +557,8 @@ function App() {
     <div className={`app-container ${isZenMode ? 'zen-mode' : ''}`} onClick={() => { setShowIconPicker(false); setShowCoverPicker(false); }}>
       <div className="aurora-bg"></div>
 
-      {/* --- SIDEBAR RAIL --- */}
       {!isZenMode && (
         <nav className="sidebar-rail" onClick={() => setIsSidebarOpen(false)}>
-          {/* LOGO CUSTOM KAMU */}
           <div className="rail-avatar" style={{ padding: 0, overflow: 'hidden', background: 'transparent' }}>
             <img
               src={logoSaya}
@@ -559,7 +574,6 @@ function App() {
         </nav>
       )}
 
-      {/* --- SIDEBAR PANEL --- */}
       <aside className={`sidebar-panel ${(!isSidebarOpen || isZenMode) ? 'closed' : ''}`}>
         <div style={{ marginBottom: '1rem' }}><GlobalSearch tasks={tasks} folders={folders} onResultClick={handleSearchResultClick} /></div>
         <div className="sidebar-section-header"><span>My Folders</span><button onClick={createNewFolder} title="New Folder"><PiPlus /></button></div>
@@ -602,7 +616,6 @@ function App() {
         )}
       </aside>
 
-      {/* --- MAIN CONTENT AREA --- */}
       <main className="editor-area" onClick={() => !isZenMode && setIsSidebarOpen(false)}>
         {!isZenMode && (
           <header className="editor-header">
@@ -1038,14 +1051,18 @@ function App() {
               </div>
 
               <div className="editor-wrapper">
-                <EditorWrapper key={activeNote?.id} note={activeNote!} isDarkMode={isDarkMode} />
+                <EditorWrapper
+                  key={activeNote?.id}
+                  note={activeNote!}
+                  isDarkMode={isDarkMode}
+                  onContentChange={onNoteContentChange}
+                />
               </div>
             </article>
           </div>
         )}
       </main>
 
-      {/* --- ALL MODALS --- */}
       {quickAddPopover.isOpen && (
         <div className="modal-overlay transparent" onClick={() => setQuickAddPopover({ isOpen: false, target: null, date: '' })}>
           <div className="quick-add-popover" style={calculatePopoverPosition(quickAddPopover.target)} onClick={e => e.stopPropagation()}>
@@ -1238,7 +1255,6 @@ function App() {
         </div>
       )}
 
-      {/* MODAL CUSTOM UNTUK HAPUS GOAL */}
       {deleteGoalModal.isOpen && (
         <div className="modal-overlay" onClick={() => setDeleteGoalModal({ isOpen: false, goalId: '' })}>
           <div className="modal-content" onClick={e => e.stopPropagation()}>
@@ -1254,7 +1270,6 @@ function App() {
         </div>
       )}
 
-      {/* MODAL CUSTOM UNTUK TAMBAH TAG (LABEL) */}
       {addTagModal && (
         <div className="modal-overlay" onClick={() => setAddTagModal(false)}>
           <div className="modal-content" onClick={e => e.stopPropagation()}>
