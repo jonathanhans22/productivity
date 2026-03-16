@@ -1316,7 +1316,6 @@
   overflow: hidden;
 }
 
-/* Text pill — tampil untuk 2 event pertama */
 .cal-event-pill {
   display: flex;
   align-items: center;
@@ -1330,6 +1329,8 @@
   cursor: grab;
   white-space: nowrap;
   transition: transform 0.12s, opacity 0.12s;
+  width: 100%;
+  box-sizing: border-box;
 }
 
 .cal-event-pill:hover {
@@ -1345,6 +1346,7 @@
 .pill-status-icon {
   font-size: 0.6rem;
   flex-shrink: 0;
+  /* Menjaga agar ikon status tidak ikut mengecil atau gepeng */
 }
 
 .pill-text {
@@ -1352,6 +1354,8 @@
   text-overflow: ellipsis;
   white-space: nowrap;
   flex: 1;
+  min-width: 0;
+  /* PENTING: Ini adalah trik agar Flexbox mengizinkan teks terpotong (ellipsis) */
 }
 
 /* Row dots untuk event ke-3+ */
