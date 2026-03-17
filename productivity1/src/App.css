@@ -1305,6 +1305,8 @@
   cursor: pointer;
   display: flex;
   flex-direction: column;
+  min-width: 0;
+  /* PENTING: Mencegah grid hari membesar mengikuti panjang teks */
 }
 
 /* Wrapper semua event dalam 1 hari */
@@ -1314,6 +1316,8 @@
   flex-direction: column;
   gap: 3px;
   overflow: hidden;
+  width: 100%;
+  /* Pastikan pembungkus event tidak meluber */
 }
 
 .cal-event-pill {
@@ -1327,16 +1331,14 @@
   padding: 2px 5px;
   overflow: hidden;
   cursor: grab;
-  white-space: nowrap;
   transition: transform 0.12s, opacity 0.12s;
   width: 100%;
-  /* Memastikan kotak mengambil lebar penuh tapi tidak meluber */
   box-sizing: border-box;
 }
 
-.cal-event-pill:hover {
-  transform: translateX(2px);
-  opacity: 0.9;
+.cal-event-pill.pill-done {
+  opacity: 0.55;
+  text-decoration: line-through;
 }
 
 .cal-event-pill.pill-done {
@@ -1347,7 +1349,6 @@
 .pill-status-icon {
   font-size: 0.6rem;
   flex-shrink: 0;
-  /* Menjaga agar ikon status tidak ikut mengecil atau gepeng */
 }
 
 .pill-text {
@@ -1356,7 +1357,8 @@
   white-space: nowrap;
   flex: 1;
   min-width: 0;
-  /* PENTING: Ini adalah trik agar Flexbox mengizinkan teks terpotong (ellipsis) */
+  display: block;
+  /* Memastikan teks berbentuk block agar ellipsis berfungsi sempurna */
 }
 
 /* Row dots untuk event ke-3+ */
