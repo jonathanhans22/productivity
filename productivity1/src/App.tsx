@@ -54,12 +54,35 @@ function EditorWrapper({ note, isDarkMode, onContentChange }: { note: Note, isDa
     }, 1000);
   };
 
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    if (e.ctrlKey && (e.key === ']' || e.key === '[')) {
+      e.preventDefault();
+      e.stopPropagation();
+
+      const target = e.target as HTMLElement;
+
+      const tabEvent = new KeyboardEvent('keydown', {
+        key: 'Tab',
+        code: 'Tab',
+        keyCode: 9,
+        which: 9,
+        shiftKey: e.key === '[',
+        bubbles: true,
+        cancelable: true,
+      });
+
+      target.dispatchEvent(tabEvent);
+    }
+  };
+
   return (
-    <BlockNoteView
-      editor={editor}
-      theme={isDarkMode ? 'dark' : 'light'}
-      onChange={handleEditorChange}
-    />
+    <div onKeyDownCapture={handleKeyDown} style={{ width: '100%', height: '100%' }}>
+      <BlockNoteView
+        editor={editor}
+        theme={isDarkMode ? 'dark' : 'light'}
+        onChange={handleEditorChange}
+      />
+    </div>
   );
 }
 
