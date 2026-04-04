@@ -58,9 +58,9 @@ function EditorWrapper({ note, isDarkMode, onContentChange }: { note: Note, isDa
     if (e.ctrlKey && (e.key === ']' || e.key === '[')) {
       e.preventDefault();
       e.stopPropagation();
-      
+
       const pmDom = document.querySelector('.ProseMirror') as HTMLElement;
-      
+
       if (pmDom) {
         const tabEvent = new KeyboardEvent('keydown', {
           key: 'Tab',
@@ -71,7 +71,7 @@ function EditorWrapper({ note, isDarkMode, onContentChange }: { note: Note, isDa
           bubbles: true,
           cancelable: true,
         });
-        
+
         pmDom.dispatchEvent(tabEvent);
       }
     }
@@ -79,25 +79,30 @@ function EditorWrapper({ note, isDarkMode, onContentChange }: { note: Note, isDa
 
   const handlePaste = (e: React.ClipboardEvent<HTMLDivElement>) => {
     const cursor = editor.getTextCursorPosition();
-    
+
+    // Pastikan kita sedang berada di dalam list
     if (cursor && cursor.block && (cursor.block.type === 'bulletListItem' || cursor.block.type === 'numberedListItem')) {
       const plainText = e.clipboardData.getData('text/plain');
-      
+
       if (plainText) {
         e.preventDefault();
         e.stopPropagation();
-        
+
+        // Pecah teks berdasarkan baris baru (enter)
         const lines = plainText.split(/\r?\n/).filter(line => line.trim() !== '');
-        
+
         if (lines.length > 0) {
-          editor.insertText(lines[0]);
-          
+          // 1. Sisipkan baris pertama langsung di posisi kursor (native browser command)
+          document.execCommand('insertText', false, lines[0]);
+
+          // 2. Jika ada baris berikutnya, buatkan blok list baru di bawahnya
           if (lines.length > 1) {
-            const newBlocks = lines.slice(1).map(line => ({
-              type: cursor.block.type as "bulletListItem" | "numberedListItem",
+            // Gunakan any jika TypeScript masih mengeluh soal tipe blok
+            const newBlocks: any[] = lines.slice(1).map(line => ({
+              type: cursor.block.type,
               content: line
             }));
-            
+
             editor.insertBlocks(newBlocks, cursor.block, 'after');
           }
         }
@@ -106,8 +111,8 @@ function EditorWrapper({ note, isDarkMode, onContentChange }: { note: Note, isDa
   };
 
   return (
-    <div 
-      onKeyDownCapture={handleKeyDown} 
+    <div
+      onKeyDownCapture={handleKeyDown}
       onPasteCapture={handlePaste}
       style={{ width: '100%', height: '100%' }}
     >
