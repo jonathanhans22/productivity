@@ -58,25 +58,59 @@ function EditorWrapper({ note, isDarkMode, onContentChange }: { note: Note, isDa
     if (e.ctrlKey && (e.key === ']' || e.key === '[')) {
       e.preventDefault();
       e.stopPropagation();
+      
+      const pmDom = document.querySelector('.ProseMirror') as HTMLElement;
+      
+      if (pmDom) {
+        const tabEvent = new KeyboardEvent('keydown', {
+          key: 'Tab',
+          code: 'Tab',
+          keyCode: 9,
+          which: 9,
+          shiftKey: e.key === '[',
+          bubbles: true,
+          cancelable: true,
+        });
+        
+        pmDom.dispatchEvent(tabEvent);
+      }
+    }
+  };
 
-      const target = e.target as HTMLElement;
-
-      const tabEvent = new KeyboardEvent('keydown', {
-        key: 'Tab',
-        code: 'Tab',
-        keyCode: 9,
-        which: 9,
-        shiftKey: e.key === '[',
-        bubbles: true,
-        cancelable: true,
-      });
-
-      target.dispatchEvent(tabEvent);
+  const handlePaste = (e: React.ClipboardEvent<HTMLDivElement>) => {
+    const cursor = editor.getTextCursorPosition();
+    
+    if (cursor && cursor.block && (cursor.block.type === 'bulletListItem' || cursor.block.type === 'numberedListItem')) {
+      const plainText = e.clipboardData.getData('text/plain');
+      
+      if (plainText) {
+        e.preventDefault();
+        e.stopPropagation();
+        
+        const lines = plainText.split(/\r?\n/).filter(line => line.trim() !== '');
+        
+        if (lines.length > 0) {
+          editor.insertText(lines[0]);
+          
+          if (lines.length > 1) {
+            const newBlocks = lines.slice(1).map(line => ({
+              type: cursor.block.type as "bulletListItem" | "numberedListItem",
+              content: line
+            }));
+            
+            editor.insertBlocks(newBlocks, cursor.block, 'after');
+          }
+        }
+      }
     }
   };
 
   return (
-    <div onKeyDownCapture={handleKeyDown} style={{ width: '100%', height: '100%' }}>
+    <div 
+      onKeyDownCapture={handleKeyDown} 
+      onPasteCapture={handlePaste}
+      style={{ width: '100%', height: '100%' }}
+    >
       <BlockNoteView
         editor={editor}
         theme={isDarkMode ? 'dark' : 'light'}
