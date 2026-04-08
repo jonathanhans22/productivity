@@ -3294,3 +3294,8 @@ select.form-control {
   position: relative;
   z-index: 1;
 }
+
+/* Memperbaiki masalah background bertabrakan pada anak (nested list) di BlockNote */
+.bn-block-outer[data-background-color="default"] {
+  background-color: transparent !important;
+}
