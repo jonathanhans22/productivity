@@ -81,7 +81,14 @@ function EditorWrapper({ note, isDarkMode, onContentChange }: { note: Note, isDa
     ? JSON.parse(note.content)
     : (typeof note.content === 'object' ? note.content : undefined);
 
-  const editor = useCreateBlockNote({ initialContent });
+  const editor = useCreateBlockNote({
+    initialContent,
+    domAttributes: {
+      editor: {
+        spellcheck: "false"
+      }
+    }
+  });
   const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const handleEditorChange = () => {
