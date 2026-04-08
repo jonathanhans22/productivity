@@ -80,8 +80,14 @@ function EditorWrapper({ note, isDarkMode, onContentChange }: { note: Note, isDa
   const handlePaste = (e: React.ClipboardEvent<HTMLDivElement>) => {
     const cursor = editor.getTextCursorPosition();
 
-    // Pastikan kita sedang berada di dalam list
-    if (cursor && cursor.block && (cursor.block.type === 'bulletListItem' || cursor.block.type === 'numberedListItem')) {
+    // Tambahkan kondisi 'heading' agar blok H1/H2/H3 ikut dipertahankan
+    if (
+      cursor &&
+      cursor.block &&
+      (cursor.block.type === 'bulletListItem' ||
+        cursor.block.type === 'numberedListItem' ||
+        cursor.block.type === 'heading')
+    ) {
       const plainText = e.clipboardData.getData('text/plain');
 
       if (plainText) {
@@ -92,14 +98,14 @@ function EditorWrapper({ note, isDarkMode, onContentChange }: { note: Note, isDa
         const lines = plainText.split(/\r?\n/).filter(line => line.trim() !== '');
 
         if (lines.length > 0) {
-          // 1. Sisipkan baris pertama langsung di posisi kursor (native browser command)
+          // 1. Sisipkan baris pertama langsung di posisi kursor sebagai teks biasa
           document.execCommand('insertText', false, lines[0]);
 
-          // 2. Jika ada baris berikutnya, buatkan blok list baru di bawahnya
+          // 2. Jika ada baris berikutnya, buatkan blok baru di bawahnya dengan tipe yang sama
           if (lines.length > 1) {
-            // Gunakan any jika TypeScript masih mengeluh soal tipe blok
             const newBlocks: any[] = lines.slice(1).map(line => ({
               type: cursor.block.type,
+              props: cursor.block.props, // Tambahkan ini agar level heading (H1/H2/H3) tidak hilang
               content: line
             }));
 
