@@ -35,6 +35,7 @@ const COVER_LIST = [
 
 const getCustomSlashMenuItems = (editor: any) => {
   const colors = [
+    { name: "Default", value: "default", hex: "transparent" },
     { name: "Gray", value: "gray", hex: "#ebeced" },
     { name: "Brown", value: "brown", hex: "#e9e5e3" },
     { name: "Orange", value: "orange", hex: "#faebdd" },
@@ -56,7 +57,7 @@ const getCustomSlashMenuItems = (editor: any) => {
         });
       }
     },
-    aliases: [color.name.toLowerCase(), "background", "bg", "stabillo", "warna"],
+    aliases: [color.name.toLowerCase(), "background", "bg", "stabillo", "warna", "hapus"],
     group: "Background Colors",
     icon: (
       <div
@@ -64,12 +65,13 @@ const getCustomSlashMenuItems = (editor: any) => {
           width: "18px",
           height: "18px",
           borderRadius: "4px",
-          backgroundColor: color.hex, // Menggunakan warna pastel untuk ikon
-          border: "1px solid var(--border-subtle)" // Border transparan menyesuaikan tema
+          backgroundColor: color.hex,
+          border: color.value === "default" ? "1px dashed var(--text-secondary)" : "1px solid var(--border-subtle)",
+          opacity: color.value === "default" ? 0.5 : 1
         }}
       />
     ),
-    subtext: `Ubah latar belakang menjadi ${color.name.toLowerCase()}`,
+    subtext: color.value === "default" ? "Hapus warna latar belakang" : `Ubah latar belakang menjadi ${color.name.toLowerCase()}`,
   }));
   return [...getDefaultReactSlashMenuItems(editor), ...colorItems];
 };
