@@ -35,15 +35,15 @@ const COVER_LIST = [
 
 const getCustomSlashMenuItems = (editor: any) => {
   const colors = [
-    { name: "Red", value: "red" },
-    { name: "Blue", value: "blue" },
-    { name: "Green", value: "green" },
-    { name: "Yellow", value: "yellow" },
-    { name: "Purple", value: "purple" },
-    { name: "Pink", value: "pink" },
-    { name: "Orange", value: "orange" },
-    { name: "Brown", value: "brown" },
-    { name: "Gray", value: "gray" },
+    { name: "Gray", value: "gray", hex: "#ebeced" },
+    { name: "Brown", value: "brown", hex: "#e9e5e3" },
+    { name: "Orange", value: "orange", hex: "#faebdd" },
+    { name: "Yellow", value: "yellow", hex: "#fbf3db" },
+    { name: "Green", value: "green", hex: "#ddedea" },
+    { name: "Blue", value: "blue", hex: "#ddebf1" },
+    { name: "Purple", value: "purple", hex: "#eae4f2" },
+    { name: "Pink", value: "pink", hex: "#f4dfeb" },
+    { name: "Red", value: "red", hex: "#fbe4e4" },
   ];
 
   const colorItems = colors.map((color) => ({
@@ -64,14 +64,13 @@ const getCustomSlashMenuItems = (editor: any) => {
           width: "18px",
           height: "18px",
           borderRadius: "4px",
-          backgroundColor: color.value,
-          border: "1px solid #e0e0e0"
+          backgroundColor: color.hex, // Menggunakan warna pastel untuk ikon
+          border: "1px solid var(--border-subtle)" // Border transparan menyesuaikan tema
         }}
       />
     ),
     subtext: `Ubah latar belakang menjadi ${color.name.toLowerCase()}`,
   }));
-
   return [...getDefaultReactSlashMenuItems(editor), ...colorItems];
 };
 
