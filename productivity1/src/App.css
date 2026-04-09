@@ -3299,3 +3299,104 @@ select.form-control {
 .bn-block-outer[data-background-color="default"] {
   background-color: transparent !important;
 }
+
+/* ============================================================
+   READING MODE & CUSTOM FIND BAR STYLES
+   ============================================================ */
+
+/* === READING MODE BUTTON === */
+.btn-reading-toggle {
+  position: fixed;
+  top: 1.5rem;
+  right: 5.5rem;
+  /* Posisi di sebelah tombol Zen Mode */
+  z-index: 100;
+  background: var(--bg-glass);
+  border: 1px solid var(--border-subtle);
+  color: var(--text-secondary);
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  opacity: 0.4;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+}
+
+.btn-reading-toggle:hover,
+.btn-reading-toggle.active {
+  opacity: 1;
+  color: var(--text-primary);
+  background: var(--bg-hover);
+  transform: scale(1.08);
+  border-color: var(--border-strong);
+}
+
+.btn-reading-toggle.active {
+  background: var(--accent);
+  color: #fff;
+  border-color: var(--accent);
+}
+
+/* === CUSTOM FIND BAR (CTRL+F) === */
+.custom-find-bar {
+  position: fixed;
+  top: 1.5rem;
+  right: 9rem;
+  /* Posisi di sebelah tombol Reading Mode */
+  z-index: 101;
+  background: var(--bg-main);
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  padding: 4px 8px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.15);
+  animation: scaleIn 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.custom-find-input {
+  border: none;
+  background: transparent;
+  outline: none;
+  color: var(--text-primary);
+  padding: 6px 10px;
+  font-size: 0.9rem;
+  width: 180px;
+  font-family: inherit;
+}
+
+.custom-find-input::placeholder {
+  color: var(--text-secondary);
+  opacity: 0.6;
+}
+
+.custom-find-btn {
+  background: transparent;
+  border: none;
+  color: var(--text-secondary);
+  cursor: pointer;
+  padding: 6px;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.2s, color 0.2s;
+}
+
+.custom-find-btn:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.custom-find-divider {
+  width: 1px;
+  height: 20px;
+  background: var(--border-strong);
+  margin: 0 6px;
+}

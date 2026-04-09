@@ -6,7 +6,13 @@ import { useCreateBlockNote, SuggestionMenuController, getDefaultReactSlashMenuI
 import { BlockNoteView } from '@blocknote/mantine'
 import { DragDropContext, Droppable, Draggable, type DropResult, type DroppableProps } from '@hello-pangea/dnd'
 
-import { PiTelevision, PiFolder, PiNotePencil, PiStack, PiCalendar, PiMoon, PiSun, PiPlus, PiList, PiPencilSimple, PiTrash, PiCaretDown, PiFilePlus, PiImage, PiTag, PiCheckCircle, PiWarningCircle, PiX, PiCaretLeft, PiCaretRight, PiCornersOut, PiCornersIn } from 'react-icons/pi'
+import {
+  PiTelevision, PiFolder, PiNotePencil, PiStack, PiCalendar, PiMoon, PiSun,
+  PiPlus, PiList, PiPencilSimple, PiTrash, PiCaretDown, PiFilePlus, PiImage,
+  PiTag, PiCheckCircle, PiWarningCircle, PiX, PiCaretLeft, PiCaretRight,
+  PiCornersOut, PiCornersIn, PiBookOpen, PiBookOpenText, PiMagnifyingGlass,
+  PiArrowUp, PiArrowDown
+} from 'react-icons/pi'
 
 import { GlobalSearch } from './components/GlobalSearch'
 import '@blocknote/core/fonts/inter.css'
@@ -76,7 +82,7 @@ const getCustomSlashMenuItems = (editor: any) => {
   return [...getDefaultReactSlashMenuItems(editor), ...colorItems];
 };
 
-function EditorWrapper({ note, isDarkMode, onContentChange }: { note: Note, isDarkMode: boolean, onContentChange: (noteId: string, content: string) => void }) {
+function EditorWrapper({ note, isDarkMode, editable = true, onContentChange }: { note: Note, isDarkMode: boolean, editable?: boolean, onContentChange: (noteId: string, content: string) => void }) {
   const initialContent = note.content && typeof note.content === 'string'
     ? JSON.parse(note.content)
     : (typeof note.content === 'object' ? note.content : undefined);
@@ -171,6 +177,7 @@ function EditorWrapper({ note, isDarkMode, onContentChange }: { note: Note, isDa
     >
       <BlockNoteView
         editor={editor}
+        editable={editable}
         theme={isDarkMode ? 'dark' : 'light'}
         onChange={handleEditorChange}
         slashMenu={false}
@@ -207,6 +214,11 @@ function App() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(true)
   const [isZenMode, setIsZenMode] = useState(false)
   const [isDarkMode, setIsDarkMode] = useState(true)
+
+  // Custom Controls State
+  const [isReadingMode, setIsReadingMode] = useState(false)
+  const [showCustomFind, setShowCustomFind] = useState(false)
+  const [findQuery, setFindQuery] = useState('')
 
   const [folders, setFolders] = useState<Folder[]>([])
   const [tasks, setTasks] = useState<Task[]>([])
@@ -332,6 +344,32 @@ function App() {
     if (contextMenu) { window.addEventListener('click', closeContextMenu); return () => window.removeEventListener('click', closeContextMenu) }
     if (noteContextMenu) { window.addEventListener('click', closeNoteContextMenu); return () => window.removeEventListener('click', closeNoteContextMenu) }
   }, [contextMenu, noteContextMenu])
+
+  // Custom Find Logic Effect
+  useEffect(() => {
+    const handleGlobalKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'f') {
+        if (activeView === 'note') {
+          e.preventDefault();
+          setShowCustomFind(true);
+        }
+      }
+    };
+    window.addEventListener('keydown', handleGlobalKeyDown);
+    return () => window.removeEventListener('keydown', handleGlobalKeyDown);
+  }, [activeView]);
+
+  const handleFindNext = () => {
+    if (findQuery) {
+      (window as any).find(findQuery, false, false, true, false, true, false);
+    }
+  };
+
+  const handleFindPrev = () => {
+    if (findQuery) {
+      (window as any).find(findQuery, false, true, true, false, true, false);
+    }
+  };
 
   const toggleTheme = () => setIsDarkMode(!isDarkMode)
 
@@ -753,10 +791,39 @@ function App() {
           </header>
         )}
 
+        {/* Action Controls for Note View */}
         {activeView === 'note' && activeNote && (
-          <button className="btn-zen-toggle" onClick={(e) => { e.stopPropagation(); setIsZenMode(!isZenMode); }} title={isZenMode ? "Exit Zen Mode" : "Enter Zen Mode"}>
-            {isZenMode ? <PiCornersIn size={22} /> : <PiCornersOut size={22} />}
-          </button>
+          <>
+            {showCustomFind && (
+              <div className="custom-find-bar" onClick={e => e.stopPropagation()}>
+                <PiMagnifyingGlass style={{ color: 'var(--text-secondary)', marginLeft: '4px' }} />
+                <input
+                  autoFocus
+                  className="custom-find-input"
+                  placeholder="Cari di catatan (Enter)..."
+                  value={findQuery}
+                  onChange={e => setFindQuery(e.target.value)}
+                  onKeyDown={e => {
+                    if (e.key === 'Enter') {
+                      e.shiftKey ? handleFindPrev() : handleFindNext();
+                    } else if (e.key === 'Escape') {
+                      setShowCustomFind(false);
+                    }
+                  }}
+                />
+                <button className="custom-find-btn" onClick={handleFindPrev} title="Sebelumnya (Shift+Enter)"><PiArrowUp /></button>
+                <button className="custom-find-btn" onClick={handleFindNext} title="Selanjutnya (Enter)"><PiArrowDown /></button>
+                <div className="custom-find-divider"></div>
+                <button className="custom-find-btn" onClick={() => setShowCustomFind(false)} title="Tutup (Esc)"><PiX /></button>
+              </div>
+            )}
+            <button className={`btn-reading-toggle ${isReadingMode ? 'active' : ''}`} onClick={(e) => { e.stopPropagation(); setIsReadingMode(!isReadingMode); }} title={isReadingMode ? "Keluar Mode Baca" : "Mode Baca (Read-Only)"}>
+              {isReadingMode ? <PiBookOpenText size={22} /> : <PiBookOpen size={22} />}
+            </button>
+            <button className="btn-zen-toggle" onClick={(e) => { e.stopPropagation(); setIsZenMode(!isZenMode); }} title={isZenMode ? "Exit Zen Mode" : "Enter Zen Mode"}>
+              {isZenMode ? <PiCornersIn size={22} /> : <PiCornersOut size={22} />}
+            </button>
+          </>
         )}
 
         {activeView === 'dashboard' ? (
@@ -1147,6 +1214,7 @@ function App() {
                 value={activeNote?.title || ''}
                 onChange={onNoteTitleChange}
                 placeholder="Untitled Document"
+                readOnly={isReadingMode}
               />
 
               <div className="document-meta">
@@ -1173,11 +1241,12 @@ function App() {
                 </div>
               </div>
 
-              <div className="editor-wrapper">
+              <div className="editor-wrapper" style={{ opacity: isReadingMode ? 0.9 : 1 }}>
                 <EditorWrapper
                   key={activeNote?.id}
                   note={activeNote!}
                   isDarkMode={isDarkMode}
+                  editable={!isReadingMode}
                   onContentChange={onNoteContentChange}
                 />
               </div>
