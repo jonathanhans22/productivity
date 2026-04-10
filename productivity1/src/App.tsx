@@ -10,8 +10,7 @@ import {
   PiTelevision, PiFolder, PiNotePencil, PiStack, PiCalendar, PiMoon, PiSun,
   PiPlus, PiList, PiPencilSimple, PiTrash, PiCaretDown, PiFilePlus, PiImage,
   PiTag, PiCheckCircle, PiWarningCircle, PiX, PiCaretLeft, PiCaretRight,
-  PiCornersOut, PiCornersIn, PiBookOpen, PiBookOpenText, PiMagnifyingGlass,
-  PiArrowUp, PiArrowDown
+  PiCornersOut, PiCornersIn, PiBookOpen, PiBookOpenText
 } from 'react-icons/pi'
 
 import { GlobalSearch } from './components/GlobalSearch'
@@ -215,10 +214,7 @@ function App() {
   const [isZenMode, setIsZenMode] = useState(false)
   const [isDarkMode, setIsDarkMode] = useState(true)
 
-  // Custom Controls State
   const [isReadingMode, setIsReadingMode] = useState(false)
-  const [showCustomFind, setShowCustomFind] = useState(false)
-  const [findQuery, setFindQuery] = useState('')
 
   const [folders, setFolders] = useState<Folder[]>([])
   const [tasks, setTasks] = useState<Task[]>([])
@@ -344,33 +340,6 @@ function App() {
     if (contextMenu) { window.addEventListener('click', closeContextMenu); return () => window.removeEventListener('click', closeContextMenu) }
     if (noteContextMenu) { window.addEventListener('click', closeNoteContextMenu); return () => window.removeEventListener('click', closeNoteContextMenu) }
   }, [contextMenu, noteContextMenu])
-
-  // Custom Find Logic Effect
-  useEffect(() => {
-    const handleGlobalKeyDown = (e: KeyboardEvent) => {
-      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'f') {
-        if (activeView === 'note') {
-          e.preventDefault();
-          setShowCustomFind(true);
-        }
-      }
-    };
-    window.addEventListener('keydown', handleGlobalKeyDown);
-    return () => window.removeEventListener('keydown', handleGlobalKeyDown);
-  }, [activeView]);
-
-  const handleFindNext = () => {
-    if (findQuery) {
-      (window as any).find(findQuery, false, false, true, false, true, false);
-    }
-  };
-
-  const handleFindPrev = () => {
-    if (findQuery) {
-      (window as any).find(findQuery, false, true, true, false, true, false);
-    }
-  };
-  //123123123123
 
   const toggleTheme = () => setIsDarkMode(!isDarkMode)
 
@@ -795,29 +764,6 @@ function App() {
         {/* Action Controls for Note View */}
         {activeView === 'note' && activeNote && (
           <>
-            {showCustomFind && (
-              <div className="custom-find-bar" onClick={e => e.stopPropagation()}>
-                <PiMagnifyingGlass style={{ color: 'var(--text-secondary)', marginLeft: '4px' }} />
-                <input
-                  autoFocus
-                  className="custom-find-input"
-                  placeholder="Cari di catatan (Enter)..."
-                  value={findQuery}
-                  onChange={e => setFindQuery(e.target.value)}
-                  onKeyDown={e => {
-                    if (e.key === 'Enter') {
-                      e.shiftKey ? handleFindPrev() : handleFindNext();
-                    } else if (e.key === 'Escape') {
-                      setShowCustomFind(false);
-                    }
-                  }}
-                />
-                <button className="custom-find-btn" onClick={handleFindPrev} title="Sebelumnya (Shift+Enter)"><PiArrowUp /></button>
-                <button className="custom-find-btn" onClick={handleFindNext} title="Selanjutnya (Enter)"><PiArrowDown /></button>
-                <div className="custom-find-divider"></div>
-                <button className="custom-find-btn" onClick={() => setShowCustomFind(false)} title="Tutup (Esc)"><PiX /></button>
-              </div>
-            )}
             <button className={`btn-reading-toggle ${isReadingMode ? 'active' : ''}`} onClick={(e) => { e.stopPropagation(); setIsReadingMode(!isReadingMode); }} title={isReadingMode ? "Keluar Mode Baca" : "Mode Baca (Read-Only)"}>
               {isReadingMode ? <PiBookOpenText size={22} /> : <PiBookOpen size={22} />}
             </button>
