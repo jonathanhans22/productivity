@@ -234,7 +234,7 @@ function App() {
   }
 
   const fetchData = async () => {
-    const { data: tasksData, error: taskError } = await supabase.from('tasks').select('*');
+    const { data: tasksData } = await supabase.from('tasks').select('*');
     if (tasksData) setTasks(tasksData as Task[]);
 
     const { data: foldersData } = await supabase.from('folders').select(`*, notes (*)`).order('created_at', { ascending: true });
