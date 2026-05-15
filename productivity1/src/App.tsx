@@ -109,7 +109,6 @@ function App() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(true)
   const [isRightPanelOpen, setIsRightPanelOpen] = useState(true)
 
-  // FIX 1: Hapus setter yang tidak terpakai untuk zen mode & reading mode
   const [isZenMode] = useState(false)
   const [isDarkMode, setIsDarkMode] = useState(true)
   const [isReadingMode] = useState(false)
@@ -142,8 +141,6 @@ function App() {
   const [inputModal, setInputModal] = useState<{ isOpen: boolean; mode: 'create_folder' | 'create_note'; folderId?: string }>({ isOpen: false, mode: 'create_folder' })
   const [toasts, setToasts] = useState<{ id: string; message: string; type: 'success' | 'error' }[]>([])
   
-  // FIX 2: quickAddPopover dan openEventDetail sudah dihapus karena redundant dan menimbulkan dead code
-
   const [deleteGoalModal, setDeleteGoalModal] = useState<{ isOpen: boolean; goalId: string }>({ isOpen: false, goalId: '' });
   const [addTagModal, setAddTagModal] = useState(false);
   const [financeModal, setFinanceModal] = useState<{ isOpen: boolean, type: 'income' | 'expense' }>({ isOpen: false, type: 'expense' });
@@ -1193,6 +1190,7 @@ function App() {
                     </button>
                     
                   </div>
+                </div>
               ))}
             </div>
 
