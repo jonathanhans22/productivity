@@ -4466,3 +4466,37 @@ select.form-control {
 .widget-header span {
   white-space: nowrap;
 }
+/* =======================================================
+   INTERAKTIF STATUS BADGE (POP-UP CALENDAR)
+   ======================================================= */
+.status-badge {
+  border: none;
+  padding: 4px 10px;
+  border-radius: 12px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+}
+
+.status-badge:hover {
+  transform: scale(1.05);
+  filter: brightness(1.1);
+  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+}
+
+.status-badge.to-do { 
+  background: rgba(99, 102, 241, 0.15); 
+  color: #6366f1; 
+}
+
+.status-badge.in-progress { 
+  background: rgba(245, 158, 11, 0.15); 
+  color: #f59e0b; 
+}
+
+.status-badge.done { 
+  background: rgba(34, 197, 94, 0.15); 
+  color: #22c55e; 
+}

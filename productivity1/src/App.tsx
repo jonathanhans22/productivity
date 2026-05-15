@@ -1176,7 +1176,19 @@ function App() {
                     <span className="event-card-category" style={{ color: folders.find(f => f.name === t.category)?.color || 'var(--accent)' }}>
                       • {t.category}
                     </span>
-                    <span className="event-card-status">{t.status}</span>
+                    
+                    {/* TOMBOL STATUS INTERAKTIF */}
+                    <button 
+                      className={`status-badge ${t.status.replace(/\s+/g, '-').toLowerCase()}`}
+                      onClick={(e) => { 
+                        e.stopPropagation(); 
+                        toggleTaskStatus(t.id, t.status); 
+                      }}
+                      title="Klik untuk ubah status"
+                    >
+                      {t.status}
+                    </button>
+                    
                   </div>
                 </div>
               ))}
