@@ -8,7 +8,7 @@ import { DragDropContext, Droppable, Draggable, type DropResult, type DroppableP
 import PriorityView from './components/PriorityView';
 import {
   PiTelevision, PiFolder, PiNotePencil, PiStack, PiCalendar, PiMoon, PiSun, PiTarget,
-  PiPlus, PiList, PiPencilSimple, PiTrash, PiCaretDown, PiImage,
+  PiPlus, PiList, PiPencilSimple, PiTrash, PiCaretDown, PiImage, PiFilePlus,
   PiTag, PiCheckCircle, PiWarningCircle, PiX, PiCommand, PiSidebarSimple,
   PiWallet, PiArrowDownRight, PiArrowUpRight
 } from 'react-icons/pi'
@@ -108,9 +108,11 @@ export const StrictModeDroppable = ({ children, ...props }: DroppableProps) => {
 function App() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(true)
   const [isRightPanelOpen, setIsRightPanelOpen] = useState(true)
-  const [isZenMode, setIsZenMode] = useState(false)
+
+  // FIX 1: Hapus setter yang tidak terpakai untuk zen mode & reading mode
+  const [isZenMode] = useState(false)
   const [isDarkMode, setIsDarkMode] = useState(true)
-  const [isReadingMode, setIsReadingMode] = useState(false)
+  const [isReadingMode] = useState(false)
   const [showCommandPalette, setShowCommandPalette] = useState(false)
 
   const [folders, setFolders] = useState<Folder[]>([])
@@ -139,7 +141,8 @@ function App() {
   const [deleteTaskModal, setDeleteTaskModal] = useState<{ isOpen: boolean; taskId: string; taskTitle: string }>({ isOpen: false, taskId: '', taskTitle: '' })
   const [inputModal, setInputModal] = useState<{ isOpen: boolean; mode: 'create_folder' | 'create_note'; folderId?: string }>({ isOpen: false, mode: 'create_folder' })
   const [toasts, setToasts] = useState<{ id: string; message: string; type: 'success' | 'error' }[]>([])
-  const [quickAddPopover, setQuickAddPopover] = useState<{ isOpen: boolean; target: HTMLElement | null; date: string }>({ isOpen: false, target: null, date: '' });
+  
+  // FIX 2: quickAddPopover dan openEventDetail sudah dihapus karena redundant dan menimbulkan dead code
 
   const [deleteGoalModal, setDeleteGoalModal] = useState<{ isOpen: boolean; goalId: string }>({ isOpen: false, goalId: '' });
   const [addTagModal, setAddTagModal] = useState(false);
@@ -335,14 +338,6 @@ function App() {
     if (data) { setTasks([...tasks, data as Task]); setTaskModal({ ...taskModal, isOpen: false }); showToast('Tugas ditambahkan'); }
   }
 
-  const handleQuickAddSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
-    e.preventDefault(); const formData = new FormData(e.currentTarget); const title = formData.get('title') as string;
-    if (!title) return;
-    const taskData = { title, category: formData.get('category') as string, date: quickAddPopover.date, status: 'To Do' };
-    const { data } = await supabase.from('tasks').insert([taskData]).select().single();
-    if (data) { setTasks(prev => [...prev, data as Task]); showToast('Tugas ditambahkan'); setQuickAddPopover({ isOpen: false, target: null, date: '' }); }
-  }
-
   const handleEditEventSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault(); const formData = new FormData(e.currentTarget); if (!editEventModal.event) return;
     const updatedData = { title: formData.get('title') as string, category: formData.get('category') as string, date: editEventModal.event.date, status: formData.get('status') as string, };
@@ -512,7 +507,6 @@ function App() {
   // --- FUNGSI HELPER UI & POP-UPS ---
   const openEventPopover = (e: React.MouseEvent, date: string) => { setEventPopover({ isOpen: true, target: e.currentTarget as HTMLElement, date }); };
   const closeEventPopover = () => setEventPopover({ isOpen: false, target: null, date: '' });
-  const openQuickAdd = (e: React.MouseEvent, date: string) => { setQuickAddPopover({ isOpen: true, target: e.currentTarget as HTMLElement, date }); };
   
   const openTaskModal = (category: string = '', date?: string) => {
     const validCategory = category || (folders[0]?.name || ''); const validDate = date || new Date().toISOString().split('T')[0];
@@ -636,7 +630,7 @@ function App() {
       </aside>
 
       {/* KOLOM 2: AREA KERJA UTAMA */}
-      <main className="editor-area main-column" style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }} onClick={() => !isZenMode && setIsSidebarOpen(false)}>
+      <main className="editor-area main-column" style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }} onClick={() => setIsSidebarOpen(false)}>
         {!isZenMode && (
           <header className="editor-header" style={{ padding: '1rem 2rem' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', flex: 1 }}>
@@ -727,7 +721,6 @@ function App() {
                   const isImportant = dayTasks.some(t => /urgent|penting/i.test(t.title));
                   
                   return (
-                    // === DI SINI PERBAIKANNYA: onClick ditambahkan kembali ===
                     <div key={day} className={`cal-day ${isToday ? 'today' : ''} ${isImportant ? 'important-day' : ''}`} onClick={e => openEventPopover(e, dateStr)} style={{ position: 'relative', cursor: 'pointer' }} data-date-str={dateStr}>
                       <div className="day-header"><span className="day-num">{day}</span></div>
                       {dayTasks.length > 0 && (() => {
@@ -1143,7 +1136,21 @@ function App() {
         </div>
       )}
 
-      {/* 9. Pop-up Klik Kalender (Agenda Harian) */}
+      {/* 9. Modal Konfirmasi Hapus Target (Goal) */}
+      {deleteGoalModal.isOpen && (
+        <div className="modal-overlay" onClick={() => setDeleteGoalModal({ isOpen: false, goalId: '' })}>
+          <div className="modal-content" onClick={e => e.stopPropagation()}>
+            <h3 style={{ marginTop: 0, color: '#ef4444' }}>Hapus Target</h3>
+            <p>Apakah Anda yakin ingin menghapus target (goal) ini?</p>
+            <div className="modal-actions">
+              <button className="btn-cancel" onClick={() => setDeleteGoalModal({ isOpen: false, goalId: '' })}>Batal</button>
+              <button className="btn-primary" style={{ background: '#ef4444' }} onClick={confirmDeleteGoal}>Hapus</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 10. Pop-up Klik Kalender (Agenda Harian) */}
       {eventPopover.isOpen && (
         <div className="modal-overlay transparent" onClick={closeEventPopover}>
           <div className="quick-add-popover" style={calculatePopoverPosition(eventPopover.target)} onClick={e => e.stopPropagation()}>
