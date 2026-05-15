@@ -1177,7 +1177,7 @@ function App() {
                       • {t.category}
                     </span>
                     
-                    {/* TOMBOL STATUS INTERAKTIF */}
+                    {/* TOMBOL STATUS DENGAN PRINSIP UI/UX YANG BAIK */}
                     <button 
                       className={`status-badge ${t.status.replace(/\s+/g, '-').toLowerCase()}`}
                       onClick={(e) => { 
@@ -1186,11 +1186,13 @@ function App() {
                       }}
                       title="Klik untuk ubah status"
                     >
+                      <span className="status-icon">
+                        {t.status === 'To Do' ? '○' : t.status === 'In Progress' ? '◑' : '●'}
+                      </span>
                       {t.status}
                     </button>
                     
                   </div>
-                </div>
               ))}
             </div>
 
